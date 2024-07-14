@@ -7,8 +7,7 @@ edition = "2021"
 # https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["std"]
-std     = ["rustc-hash/std"]
+default = []
 
 [dependencies]
 assert-unchecked  = { version = "0.1.2" }

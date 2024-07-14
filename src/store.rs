@@ -53,10 +53,8 @@ impl AtomStore {
         let entry = self.insert_entry(s, hash);
         let entry = Arc::into_raw(entry);
 
-        let ptr: NonNull<HeapAtom> = unsafe {
-            // Safety: Arc::into_raw returns a non-null pointer
-            NonNull::new_unchecked(entry as *mut HeapAtom)
-        };
+        // Safety: Arc::into_raw returns a non-null pointer
+        let ptr: NonNull<HeapAtom> = unsafe { NonNull::new_unchecked(entry as *mut HeapAtom) };
         debug_assert!(0 == (ptr.as_ptr() as *const u8 as usize) & Tag::MASK_USIZE);
         Atom {
             inner: TaggedValue::new_ptr(ptr),

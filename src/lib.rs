@@ -1,5 +1,3 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-
 //! # Desired Behavior & Traits
 //! 1. Smallest-possible compact representation
 //! 2. O(1) comparisons
@@ -29,10 +27,11 @@ mod test;
 use core::{hash::Hash, marker::PhantomData, ops::Deref};
 
 use alloc::{borrow::Cow, sync::Arc};
-// use std::hash::DefaultHasher;
 use heap::HeapAtom;
 use store::atom;
 use tags::{Tag, TaggedValue, MAX_INLINE_LEN};
+
+use alloc::string::String;
 
 pub(crate) const ALIGNMENT: usize = 8;
 
@@ -265,7 +264,7 @@ impl Drop for Atom<'_> {
     fn drop(&mut self) {
         if self.is_heap() {
             let heap_atom = unsafe { HeapAtom::restore_arc(self.inner) };
-            drop(heap_atom)
+            drop(heap_atom);
         }
     }
 }

@@ -190,7 +190,7 @@ impl TaggedValue {
             feature = "atom_size_128"
         )))]
         unsafe {
-            std::mem::transmute(Some(self.value))
+            transmute(Some(self.value))
         }
     }
 

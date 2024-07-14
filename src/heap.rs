@@ -11,6 +11,8 @@ use rustc_hash::FxHasher;
 
 use alloc::sync::Arc;
 
+use alloc::boxed::Box;
+
 use crate::tags::{Tag, TaggedValue};
 use crate::ALIGNMENT;
 
@@ -53,6 +55,11 @@ pub(crate) struct HeapAtom {
     pub(crate) string: str,
 }
 
+/// This has the same layout and representation as [`HeapAtom`], but can be
+/// constructed directly. Especially useful for sized slices.
+///
+/// The only use for this is to construct a [`HeapAtom`]. It gets casted
+/// immediately after construction.
 #[repr(C)]
 #[derive(Debug)]
 struct Generic<T: ?Sized> {
