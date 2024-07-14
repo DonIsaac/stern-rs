@@ -1,4 +1,4 @@
-use core::{num::NonZeroU8, ptr::NonNull, slice};
+use core::{mem::transmute, num::NonZeroU8, ptr::NonNull, slice};
 use std::os::raw::c_void;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
