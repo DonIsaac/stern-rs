@@ -36,6 +36,8 @@ use tags::{Tag, TaggedValue, MAX_INLINE_LEN};
 
 pub(crate) const ALIGNMENT: usize = 8;
 
+pub use store::AtomStore;
+
 #[derive(Debug)]
 pub struct Atom<'a> {
     inner: TaggedValue,
@@ -225,11 +227,6 @@ impl PartialEq for Atom<'_> {
     }
 }
 
-// impl<S: AsRef<str>> PartialEq<S> for Atom<'_> {
-//     fn eq(&self, other: &S) -> bool {
-//         self.as_str() == other.as_ref()
-//     }
-// }
 impl PartialEq<str> for Atom<'_> {
     #[inline]
     fn eq(&self, other: &str) -> bool {

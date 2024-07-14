@@ -282,15 +282,6 @@ impl HeapAtom {
         Self::get_layout(strlen).size()
     }
 
-    #[inline(always)]
-    const fn alloc_len(&self) -> usize {
-        Self::sizeof(self.header.len)
-    }
-
-    // const fn len_offset() -> usize {
-    //     Layout::from_size_align_unchecked(size_of::<Header>, ALIGNMENT)
-    // }
-
     const unsafe fn str_ptr(&self) -> *const u8 {
         (self as *const _ as *const u8).add(size_of::<Header>())
     }
