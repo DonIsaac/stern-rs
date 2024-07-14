@@ -5,7 +5,7 @@ extern crate alloc;
 
 use core::alloc::Layout;
 use core::hash::{Hash, Hasher};
-use core::mem::{align_of_val, size_of, transmute, MaybeUninit};
+use core::mem::{align_of, align_of_val, size_of, transmute, MaybeUninit};
 use core::num::NonZeroU32;
 use core::ptr::{self};
 use core::{fmt, slice};
@@ -174,6 +174,7 @@ impl HeapAtom {
         arc_atom
     }
 
+    #[inline(never)]
     fn zero_sized() -> ArcAtom {
         let empty: Generic<[u8; 0]> = Generic {
             header: Header::default(),
@@ -188,13 +189,24 @@ impl HeapAtom {
         debug_assert_eq!(arc_inner.data.header.len, 0);
         debug_assert_eq!(align_of_val(&arc_inner), 8);
 
-        let raw: Arc<Generic<[u8]>> = unsafe { Arc::from_raw(&arc_inner as &SneakyArcInner<Generic<[u8]>> as *const _ as _) };
+        // type annotation needed by rustc (#E0699) (says its no longer emitted
+        // but I'm getting it so idk)
+        let raw_ptr: *mut SneakyArcInner<Generic<[u8; 0]>> = Box::leak(Box::new(arc_inner)) as *mut _;
+        let atom_ptr = unsafe { raw_ptr.byte_add(size_of::<SneakyArcInner<()>>()) } as *const Generic<[u8; 0]>;
+        debug_assert_eq!(unsafe { atom_ptr.as_ref().unwrap().header.len }, 0);
+
+        let raw = unsafe { Arc::from_raw(atom_ptr) };
         debug_assert_eq!(raw.header.len, 0);
         debug_assert_eq!(raw.string, []);
         debug_assert_eq!(align_of_val(raw.as_ref()), 8);
 
+        let fat = raw as Arc<Generic<[u8]>>;
+        debug_assert_eq!(fat.header.len, 0);
+        debug_assert_eq!(fat.string, []);
+        debug_assert_eq!(align_of_val(fat.as_ref()), 8);
+
         // println!("{:#?}", );
-        unsafe { transmute(raw) }
+        unsafe { transmute(fat) }
     }
 
     #[inline]
