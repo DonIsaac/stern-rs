@@ -49,7 +49,6 @@ impl Default for Header {
 #[derive(Debug)]
 pub(crate) struct HeapAtom {
     pub(crate) header: Header,
-    // TODO: pad with 4 bytes?
     pub(crate) string: str,
 }
 
