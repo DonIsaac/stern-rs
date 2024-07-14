@@ -18,6 +18,7 @@
 
 #[macro_use]
 extern crate assert_unchecked;
+extern crate alloc;
 
 mod heap;
 mod ptr;
@@ -26,8 +27,9 @@ mod tags;
 #[cfg(test)]
 mod test;
 
-use core::{hash::Hash, marker::PhantomData, ops::Deref};
+use core::{hash::Hash, marker::PhantomData, ops::Deref, ptr::NonNull};
 
+use alloc::sync::Arc;
 // use std::hash::DefaultHasher;
 use heap::HeapAtom;
 use tags::{Tag, TaggedValue, MAX_INLINE_LEN};
@@ -66,7 +68,10 @@ impl Atom<'static> {
 
     fn new_heap(s: &str) -> Self {
         let atom = HeapAtom::new(s);
-        let inner = unsafe { TaggedValue::new_ptr(atom.as_non_null()) };
+        let inner = unsafe {
+            let raw = Arc::into_raw(atom) as *mut HeapAtom;
+            TaggedValue::new_ptr(NonNull::new_unchecked(raw))
+        };
 
         Self {
             inner,
@@ -160,9 +165,6 @@ impl PartialEq for Atom<'_> {
             return false;
         }
 
-        // match (self.inner.tag(), self.)
-
-        // false // todo
         self.as_str() == self.as_str()
     }
 }
