@@ -210,6 +210,12 @@ impl TaggedValue {
             std::mem::transmute(Some(self.value))
         }
     }
+
+    #[inline(always)]
+    pub const fn hash(&self) -> u64 {
+        self.get_value() as u64
+    }
+
     // unsafe fn new_tag_unchecked(value: &[u8]) -> Self {
     //     let len = value.len();
     //     debug_assert!(len <= MAX_INLINE_LEN);
@@ -220,7 +226,7 @@ impl TaggedValue {
     // }
 
     #[inline(always)]
-    pub(crate) fn tag_byte(&self) -> u8 {
+    pub(crate) const fn tag_byte(&self) -> u8 {
         // SAFETY:
         (self.get_value() & 0xff) as u8
     }
@@ -232,12 +238,19 @@ impl TaggedValue {
         unsafe { Tag::new_unchecked((self.get_value() & Tag::MASK_USIZE) as u8) }
     }
 
+    pub(crate) const fn len(&self) -> usize {
+        debug_assert!(self.tag().is_inline());
+
+        (self.tag_byte() >> Tag::INLINE_LEN_OFFSET) as usize
+    }
+
     #[inline(always)]
     const fn get_value(&self) -> RawTaggedValue {
         unsafe { core::mem::transmute(Some(self.value)) }
     }
 
-    pub fn data(&self) -> &[u8] {
+    /// Get a slice to the data inlined in this [`TaggedValue`]
+    pub fn as_bytes(&self) -> &[u8] {
         // debug_assert_eq!(self.tag(), Tag::Inline);
         debug_assert!(self.tag().is_inline());
 
@@ -253,7 +266,8 @@ impl TaggedValue {
         unsafe { slice::from_raw_parts(data, Self::INLINE_DATA_LEN) }
     }
 
-    pub unsafe fn data_mut(&mut self) -> &mut [u8] {
+    /// Get a mutable slice to the data inlined in this [`TaggedValue`]
+    pub unsafe fn as_bytes_mut(&mut self) -> &mut [u8] {
         debug_assert!(self.tag().is_inline());
 
         let x: *mut _ = &mut self.value;

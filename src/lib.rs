@@ -23,8 +23,10 @@ mod heap;
 mod ptr;
 mod store;
 mod tags;
+#[cfg(test)]
+mod test;
 
-use core::marker::PhantomData;
+use core::{hash::Hash, marker::PhantomData, ops::Deref};
 
 // use std::hash::DefaultHasher;
 use heap::HeapAtom;
@@ -77,7 +79,7 @@ impl Atom<'static> {
         debug_assert!(len <= MAX_INLINE_LEN);
         let mut value = TaggedValue::new_inline(len as u8);
         unsafe {
-            value.data_mut()[..len].copy_from_slice(s.as_bytes());
+            value.as_bytes_mut()[..len].copy_from_slice(s.as_bytes());
         }
 
         Self {
@@ -85,62 +87,115 @@ impl Atom<'static> {
             marker: PhantomData,
         }
     }
+}
 
-    pub fn len(&self) -> usize {
+impl<'a> Atom<'a> {
+    pub const fn len(&self) -> usize {
         match self.inner.tag() {
             Tag::HeapOwned => unsafe { HeapAtom::deref_from(self.inner) }.len(),
             Tag::Inline => (self.inner.tag_byte() >> Tag::INLINE_LEN_OFFSET) as usize,
             Tag::Static => {
-                todo!("Atom#len() for Tag::Static")
+                panic!("TODO: Atom#len() for Tag::Static")
+            }
+        }
+    }
+
+    fn get_hash(&self) -> u64 {
+        match self.inner.tag() {
+            Tag::HeapOwned => unsafe { HeapAtom::deref_from(self.inner) }.hash(),
+            Tag::Inline => self.inner.hash(),
+            Tag::Static => {
+                panic!("TODO: Atom#get_hash() for Tag::Static")
             }
         }
     }
 
     #[inline(always)]
     pub(crate) fn is_heap(&self) -> bool {
-        self.inner.tag() == Tag::HeapOwned
+        self.inner.tag().is_heap_owned()
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self.inner.tag() {
+            Tag::HeapOwned => unsafe { HeapAtom::deref_from(self.inner) }.as_str(),
+            Tag::Inline => unsafe {
+                let len = self.inner.len();
+                core::str::from_utf8_unchecked(&self.inner.as_bytes()[..len])
+            },
+            Tag::Static => {
+                panic!("TODO: Atom#as_str() for Tag::Static")
+            }
+        }
     }
 }
 
-impl<'a> Atom<'a> {}
+impl Deref for Atom<'_> {
+    type Target = str;
 
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    /// Atom whose length is on max inline boundary
-    fn largest_inline() -> Atom<'static> {
-        Atom::new("a".repeat(MAX_INLINE_LEN))
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.as_str()
     }
+}
 
-    /// Atom whose length is just past the max inline boundary
-    fn smallest_heap() -> Atom<'static> {
-        Atom::new("a".repeat(MAX_INLINE_LEN + 1))
+impl Hash for Atom<'_> {
+    #[inline]
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        state.write_u64(self.get_hash())
     }
+}
 
-    #[test]
-    fn test_inlining_on_small() {
-        assert!(!Atom::new("").is_heap());
-        assert!(!Atom::new("a").is_heap());
+impl PartialEq for Atom<'_> {
+    #[inline(never)]
+    fn eq(&self, other: &Self) -> bool {
+        if self.inner == other.inner {
+            return true;
+        }
 
-        assert!(!largest_inline().is_heap());
-        assert!(smallest_heap().is_heap());
+        if self.inner.tag() != other.inner.tag() {
+            return false;
+        }
+
+        if self.get_hash() != other.get_hash() {
+            return false;
+        }
+
+        // match (self.inner.tag(), self.)
+
+        // false // todo
+        self.as_str() == self.as_str()
     }
+}
 
-    #[test]
-    fn test_inlining_on_large() {
-        assert!(
-            Atom::new("a very long string that will most certainly be allocated on the heap")
-                .is_heap()
-        );
+// impl<S: AsRef<str>> PartialEq<S> for Atom<'_> {
+//     fn eq(&self, other: &S) -> bool {
+//         self.as_str() == other.as_ref()
+//     }
+// }
+impl PartialEq<str> for Atom<'_> {
+    #[inline]
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
     }
+}
 
-    #[test]
-    fn test_len() {
-        assert_eq!(Atom::empty().len(), 0);
-        assert_eq!(Atom::new("").len(), 0);
-        assert_eq!(Atom::new("a").len(), 1);
-        assert_eq!(largest_inline().len(), MAX_INLINE_LEN);
-        assert_eq!(smallest_heap().len(), MAX_INLINE_LEN + 1);
+impl PartialEq<&'_ str> for Atom<'_> {
+    #[inline]
+    fn eq(&self, other: &&str) -> bool {
+        self.as_str() == *other
+    }
+}
+
+impl PartialEq<Atom<'_>> for str {
+    #[inline]
+    fn eq(&self, other: &Atom<'_>) -> bool {
+        self == other.as_str()
+    }
+}
+
+impl AsRef<str> for Atom<'_> {
+    #[inline]
+    fn as_ref(&self) -> &str {
+        self.as_str()
     }
 }
