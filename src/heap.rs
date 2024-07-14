@@ -45,8 +45,6 @@ impl Default for Header {
     }
 }
 
-// type Header = SneakyArcInner<StringMeta>;
-
 #[repr(C)]
 #[derive(Debug)]
 pub(crate) struct HeapAtom {
@@ -140,23 +138,15 @@ impl HeapAtom {
     }
 
     pub const unsafe fn deref_from<'a>(tagged_ptr: TaggedValue) -> &'a HeapAtom {
-        // &*(tagged_ptr.get_ptr() as *const _)
-        debug_assert!(!matches!(tagged_ptr.tag(),Tag::HeapOwned), "cannot deref a non heap-owned tagged value");
+        debug_assert!(
+            matches!(tagged_ptr.tag(), Tag::HeapOwned),
+            "cannot deref a non heap-owned tagged value"
+        );
 
         let len: u32 = ptr::read(tagged_ptr.get_ptr().cast());
         let fat_ptr = slice::from_raw_parts(tagged_ptr.get_ptr(), Self::sizeof(len));
         transmute::<_, &'a HeapAtom>(fat_ptr)
     }
-
-    // unsafe fn thin_dst(tagged_ptr: TaggedValue) -> *const HeapAtom {
-    //     debug_assert!(tagged_ptr.tag() == Tag::HeapOwned, "cannot deref a non heap-owned tagged value");
-    //     debug_assert!(!tagged_ptr.get_ptr().is_null());
-
-    //     let len: u32 = ptr::read(tagged_ptr.get_ptr().cast());
-    //     let fat_ptr = slice::from_raw_parts(tagged_ptr.get_ptr(), Self::sizeof(len));
-
-    //     transmute::<_, &HeapAtom>(fat_ptr.as_ref()) as *const _
-    // }
 
     #[inline]
     pub const fn len(&self) -> usize {
@@ -182,12 +172,14 @@ impl HeapAtom {
 
     #[must_use]
     const fn get_layout(strlen: u32) -> Layout {
-
         // TODO: use pad_to_align(). See rust issue https://github.com/rust-lang/rust/issues/67521
         let size_used = size_of::<Header>() + strlen as usize;
         let size = size_used.next_multiple_of(ALIGNMENT);
 
-        debug_assert!(size % ALIGNMENT == 0, "While getting HeapAtom layout, computed a size that was not 8-byte aligned");
+        debug_assert!(
+            size % ALIGNMENT == 0,
+            "While getting HeapAtom layout, computed a size that was not 8-byte aligned"
+        );
         #[cfg(target_pointer_width = "32")]
         {
             assert!(size <= isize::MAX);
@@ -198,7 +190,9 @@ impl HeapAtom {
         // 2. alignment is always a power of 2 b/c its a constant value of 8
         // 3. on 64bit machines, isize::MAX is always greater than u32::MAX. On
         //    32bit machines, the above assertion guarantees this invariant.
-        unsafe { Layout::from_size_align_unchecked(size_of::<Header>() + strlen as usize, ALIGNMENT) }
+        unsafe {
+            Layout::from_size_align_unchecked(size_of::<Header>() + strlen as usize, ALIGNMENT)
+        }
     }
 
     #[inline(always)]
