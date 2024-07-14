@@ -1,30 +1,16 @@
-// use core::{hash::{BuildHasher, BuildHasherDefault}, num::NonZeroU32,
-// ptr::NonNull};
-
 extern crate alloc;
 
 use core::alloc::Layout;
 use core::hash::{Hash, Hasher};
-use core::mem::{align_of_val, size_of, transmute, MaybeUninit};
+use core::mem::{size_of, transmute};
 use core::num::NonZeroU32;
 use core::ptr::{self};
-use core::{fmt, slice};
 use core::sync::atomic;
+use core::{fmt, slice};
 use rustc_hash::FxHasher;
-
-use alloc::sync::{Arc, Weak};
-// use alloc::alloc;
 
 use crate::ptr::ReadonlyNonNull;
 use crate::ALIGNMENT;
-
-// pub struct HeapAtom {
-//     ptr: NonNull<u8>,
-//     len: u32,
-//     hash: u32,
-//     store_id: NonZeroU32,
-// }
-
 
 #[derive(Debug)]
 #[repr(C)]
@@ -41,7 +27,7 @@ impl Header {
         Self {
             len: s.len() as u32,
             store_id,
-            hash: str_hash(s)
+            hash: str_hash(s),
         }
     }
 }
@@ -50,7 +36,7 @@ impl Default for Header {
         Self {
             len: 0,
             store_id: None,
-            hash: str_hash("")
+            hash: str_hash(""),
         }
     }
 }
@@ -83,9 +69,9 @@ struct SneakyArcInner<T: ?Sized> {
 
     data: T,
 }
-impl <T: ?Sized + fmt::Debug> fmt::Debug for SneakyArcInner<T> {
+impl<T: ?Sized + fmt::Debug> fmt::Debug for SneakyArcInner<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SneakyArcInner") 
+        f.debug_struct("SneakyArcInner")
             .field("strong", &self.strong)
             .field("weak", &self.weak)
             .field("data", &&self.data)
@@ -93,108 +79,57 @@ impl <T: ?Sized + fmt::Debug> fmt::Debug for SneakyArcInner<T> {
     }
 }
 
-type ArcAtomInner = SneakyArcInner<HeapAtom>;
-type ArcAtom = Arc<HeapAtom>;
-
 impl HeapAtom {
-    pub fn new(s: &str) -> ArcAtom {
+    pub fn new(s: &str) -> ReadonlyNonNull<HeapAtom> {
         assert!(s.len() <= u32::MAX as usize, "string is too long");
         if s.is_empty() {
-            return Self::zero_sized();
+            return unsafe { Self::zero_sized() };
         }
 
-        unsafe { Self::new_unchecked(s) }
+        unsafe { Self::try_new_unchecked(s) }.unwrap()
     }
 
-    // pub fn new_unchecked(s: &str) -> ReadonlyNonNull<HeapAtom> {
-    //     // let header = Header {
-    //     //     len: s.len() as u32,                   // length of the string, in bytes
-    //     //     store_id: NonZeroU32::new(1).unwrap(), // TODO
-    //     //     hash: str_hash(s),                     // pre-computed hash
-    //     // };
-    //     let header = Header::new(s, NonZeroU32::new(1).unwrap());
-
-    //     let size = size_of::<Header>() + s.len(); // # of bytes to allocate
-    //     let layout = Self::get_layout(s.len());
-
-    //     // SAFETY:
-    //     // - Layout will never be zero-sized because OVERHEAD_SIZE is 16
-    //     let ptr: *mut u8 = unsafe { alloc::alloc::alloc(layout) };
-    //     assert!(!ptr.is_null(), "OOM:alloc returned null");
-    //     assert!(ptr as usize % 8 == 0, "not 8-byte aligned");
-
-    //     // write the data to the heap
-    //     unsafe {
-    //         ptr::copy_nonoverlapping(&header, ptr as *mut Header, 1);
-    //         let string_ptr = ptr.add(size_of::<Header>());
-    //         ptr::copy_nonoverlapping(s.as_ptr(), string_ptr, s.len());
-    //     }
-
-    //     // TODO: should we use Box semantics or NonNull semantics?
-    //     // fat pointer to dynamically-sized type (DST)
-    //     let fat_dst: ReadonlyNonNull<HeapAtom> = unsafe {
-    //         let slice: &mut [u8] = slice::from_raw_parts_mut(ptr, size);
-    //         ReadonlyNonNull::new_unchecked(slice as *mut [u8] as *mut HeapAtom)
-    //     };
-
-    //     fat_dst
-    // }
-    pub fn new_unchecked(s: &str) -> ArcAtom {
+    pub unsafe fn try_new_unchecked(s: &str) -> Result<ReadonlyNonNull<HeapAtom>, &'static str> {
         let header = Header::new(s, None);
 
-        let size = size_of::<Header>() + size_of::<SneakyArcInner<()>>() + s.len(); // # of bytes to allocate
+        // let size = size_of::<Header>() + s.len(); // # of bytes to allocate
         let layout = Self::get_layout(s.len());
+        debug_assert_eq!(layout.align(), 8);
+        debug_assert!(layout.size() > 0); // should never happen
 
         // SAFETY:
-        // - Layout will never be zero-sized because OVERHEAD_SIZE is 16
+        // - Layout will never be zero-sized because Header's size is non-zero
         let ptr: *mut u8 = unsafe { alloc::alloc::alloc(layout) };
-        assert!(!ptr.is_null(), "OOM:alloc returned null");
-        assert!(ptr as usize % 8 == 0, "not 8-byte aligned");
+        if ptr.is_null() {
+            return Err("OOM: HeapAtom allocation returned null");
+        }
+        debug_assert!(ptr as usize % 8 == 0, "not 8-byte aligned");
 
         // write the data to the heap
         unsafe {
-            ptr::copy_nonoverlapping(&SneakyArcInner {
-                strong: atomic::AtomicUsize::new(1),
-                weak: atomic::AtomicUsize::new(1),
-                data: ()
-            }, ptr as *mut SneakyArcInner<()>, 1);
-            let header_pointer = ptr.add(size_of::<SneakyArcInner<()>>()) as *mut Header;
-            ptr::copy_nonoverlapping(&header, header_pointer, 1);
-            let string_ptr = header_pointer.add(size_of::<Header>()) as *mut u8;
+            ptr::copy_nonoverlapping(&header, ptr as *mut Header, 1);
+            let string_ptr = ptr.add(size_of::<Header>());
             ptr::copy_nonoverlapping(s.as_ptr(), string_ptr, s.len());
         }
 
-        let arc_atom: ArcAtom = unsafe {
-            // fat pointer to dynamically-sized type (DST)
-            let slice: &mut [u8] = slice::from_raw_parts_mut(ptr, size);
-            let fat_dst = ReadonlyNonNull::new_unchecked(slice as *mut [u8] as *mut ArcAtomInner);
-            transmute(fat_dst)
+        // TODO: should we use Box semantics or NonNull semantics?
+        // fat pointer to dynamically-sized type (DST)
+        let fat_dst: ReadonlyNonNull<HeapAtom> = unsafe {
+            let slice: &mut [u8] = slice::from_raw_parts_mut(ptr, layout.size());
+            ReadonlyNonNull::new_unchecked(slice as *mut [u8] as *mut HeapAtom)
         };
 
-        arc_atom
+        Ok(fat_dst)
     }
 
-    fn zero_sized() -> ArcAtom {
+    unsafe fn zero_sized() -> ReadonlyNonNull<HeapAtom> {
         let empty: Generic<[u8; 0]> = Generic {
             header: Header::default(),
             string: [],
         };
 
-        let arc_inner = SneakyArcInner {
-            strong: atomic::AtomicUsize::new(1),
-            weak: atomic::AtomicUsize::new(1),
-            data: empty,
-        };
-        debug_assert_eq!(arc_inner.data.header.len, 0);
-        debug_assert_eq!(align_of_val(&arc_inner), 8);
-
-        let raw: Arc<Generic<[u8]>> = unsafe { Arc::from_raw(&arc_inner as &SneakyArcInner<Generic<[u8]>> as *const _ as _) };
-        debug_assert_eq!(raw.header.len, 0);
-        debug_assert_eq!(raw.string, []);
-        debug_assert_eq!(align_of_val(raw.as_ref()), 8);
-
-        // println!("{:#?}", );
-        unsafe { transmute(raw) }
+        let fat_ptr = &empty as &Generic<[u8]>;
+        ReadonlyNonNull::new_unchecked(transmute::<_, &HeapAtom>(fat_ptr) as *const _)
     }
 
     #[inline]
@@ -206,7 +141,7 @@ impl HeapAtom {
     pub fn is_empty(&self) -> bool {
         self.header.len == 0
     }
-    
+
     #[inline(always)]
     pub fn hash(&self) -> u64 {
         self.header.hash
@@ -235,7 +170,7 @@ impl HeapAtom {
         // 2. alignment is always a power of 2 b/c its a constant value of 8
         // 3. on 64bit machines, isize::MAX is always greater than u32::MAX. On
         //    32bit machines, the above assertion guarantees this invariant.
-        unsafe { Layout::from_size_align_unchecked(size_of::<Header>() + size_of::<SneakyArcInner<()>>() + strlen, ALIGNMENT) }
+        unsafe { Layout::from_size_align_unchecked(size_of::<Header>() + strlen, ALIGNMENT) }
             .pad_to_align()
     }
 
@@ -270,8 +205,29 @@ mod test {
     #[test]
     fn test_empty() {
         let empty = HeapAtom::new("");
-        assert_eq!(empty.len(), 0);
-        assert!(empty.is_empty());
-        assert_eq!(empty.as_str(), "");
+        let atom = unsafe { empty.as_ref() };
+        assert_eq!(atom.len(), 0);
+        assert!(atom.is_empty());
+        assert_eq!(atom.as_str(), "");
+
+        let empty2 = HeapAtom::new("");
+        let atom2 = unsafe { empty2.as_ref() };
+        assert_eq!(atom2.as_str(), "");
+        assert_eq!(atom, atom2);
+
+        // FIXME: causing sigsev
+        // assert_eq!(atom.as_str(), atom2.as_str());
+        // assert!(
+        //         !ptr::addr_eq(empty.as_ptr(), empty2.as_ptr())
+        // );
+    }
+
+    #[test]
+    fn test_smol() {
+        let foo_ptr = HeapAtom::new("foo");
+        let foo = unsafe { foo_ptr.as_ref() };
+        assert_eq!(foo.len(), 3);
+        assert_eq!(foo.as_str(), "foo");
+        assert_eq!(foo, foo);
     }
 }

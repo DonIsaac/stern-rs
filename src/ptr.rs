@@ -14,7 +14,7 @@ impl<T: ?Sized> ReadonlyNonNull<T> {
 
     #[inline(always)]
     #[must_use]
-    pub unsafe fn new_unchecked(ptr: *const T) -> Self {
+    pub const unsafe fn new_unchecked(ptr: *const T) -> Self {
         Self(NonNull::new_unchecked(ptr as *mut T))
     }
 

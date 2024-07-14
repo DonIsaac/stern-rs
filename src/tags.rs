@@ -6,7 +6,7 @@ use core::{num::NonZeroU8, ptr::NonNull, slice};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub(crate) enum Tag {
-    Owned = 0b_00,
+    HeapOwned = 0b_00,
     Inline = 0b_01,
     Static = 0b_10,
 }
@@ -17,11 +17,12 @@ impl Tag {
         assert_unchecked!(value < 0b_11);
         core::mem::transmute(value)
     }
-    pub const MASK: u8 = 0b_11;
-    pub const MASK_USIZE: usize = Self::MASK as usize;
+    pub const TAG_MASK: u8 = 0b_11;
+    pub const MASK_USIZE: usize = Self::TAG_MASK as usize;
     pub const INLINE_NONZERO: NonZeroU8 = unsafe { NonZeroU8::new_unchecked(Self::Inline as u8) };
     pub const INLINE_LEN_OFFSET: u8 = 4;
 }
+// const TAG_BYTE_MASK: NonZe = unsafe { RawTaggedNonZeroValue::new_unchecked(0xff);
 
 /*
 ## Base representation:
@@ -123,13 +124,6 @@ static_assertions::assert_eq_align!(TaggedValue, u64);
 impl TaggedValue {
     const INLINE_DATA_LEN: usize = core::mem::size_of::<TaggedValue>() - 1;
 
-    /// Do not use
-    pub unsafe fn dangling() -> Self {
-        TaggedValue {
-            value: RawTaggedNonZeroValue::dangling(),
-        }
-    }
-
     #[inline(always)]
     pub fn new_ptr<T: ?Sized>(value: NonNull<T>) -> Self {
         #[cfg(any(
@@ -158,10 +152,12 @@ impl TaggedValue {
         }
     }
 
-    pub fn new_inline(len: u8) -> Self {
+    pub const fn new_inline(len: u8) -> Self {
         debug_assert!(len <= MAX_INLINE_LEN as u8);
         // let value = Tag::INLINE_NONZERO | len << (Tag::INLINE_LEN_OFFSET as NonZeroU8)
-        let tag_byte = Tag::INLINE_NONZERO | (len << Tag::INLINE_LEN_OFFSET);
+        let tag_byte = unsafe {
+            NonZeroU8::new_unchecked(Tag::INLINE_NONZERO.get() | (len << Tag::INLINE_LEN_OFFSET))
+        };
         let value = tag_byte.get() as RawTaggedValue;
         Self {
             value: unsafe { core::mem::transmute(value) },
@@ -175,6 +171,12 @@ impl TaggedValue {
     //     let tag_byte = Tag::INLINE_NONZERO | ((len as u8) << Tag::INLINE_LEN_OFFSET);
     //     let raw_value =
     // }
+
+    #[inline(always)]
+    pub(crate) fn tag_byte(&self) -> u8 {
+        // SAFETY:
+        (self.get_value() & 0xff) as u8
+    }
 
     #[inline(always)]
     pub(crate) fn tag(&self) -> Tag {
