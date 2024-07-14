@@ -98,17 +98,20 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for SneakyArcInner<T> {
 
 impl HeapAtom {
     #[must_use]
-    pub fn new(s: &str) -> Arc<HeapAtom> {
+    pub fn new(s: &str, store_id: Option<NonZeroU32>) -> Arc<HeapAtom> {
         assert!(s.len() <= u32::MAX as usize, "string is too long");
         if s.is_empty() {
             return unsafe { Self::zero_sized() };
         }
 
-        unsafe { Self::try_new_unchecked(s) }.unwrap()
+        unsafe { Self::try_new_unchecked(s, store_id) }.unwrap()
     }
 
     #[inline(never)]
-    pub unsafe fn try_new_unchecked(s: &str) -> Result<Arc<HeapAtom>, &'static str> {
+    pub unsafe fn try_new_unchecked(
+        s: &str,
+        store_id: Option<NonZeroU32>,
+    ) -> Result<Arc<HeapAtom>, &'static str> {
         assert_unchecked!(s.len() < u32::MAX as usize);
         let header = Header::new_unchecked(s, None);
 
@@ -206,6 +209,7 @@ impl HeapAtom {
         arc
     }
 
+    #[must_use]
     pub const unsafe fn deref_from<'a>(tagged_ptr: TaggedValue) -> &'a HeapAtom {
         debug_assert!(
             matches!(tagged_ptr.tag(), Tag::HeapOwned),
@@ -215,6 +219,12 @@ impl HeapAtom {
         let len: u32 = ptr::read(tagged_ptr.get_ptr().cast());
         let fat_ptr = slice::from_raw_parts(tagged_ptr.get_ptr(), Self::sizeof(len));
         transmute::<_, &'a HeapAtom>(fat_ptr)
+    }
+
+    #[must_use]
+    pub unsafe fn restore_arc(tagged_ptr: TaggedValue) -> Arc<HeapAtom> {
+        let raw_ref = Self::deref_from(tagged_ptr);
+        Arc::from_raw(raw_ref as *const HeapAtom)
     }
 
     #[inline]
@@ -294,7 +304,7 @@ impl PartialEq for HeapAtom {
 }
 impl Eq for HeapAtom {}
 
-fn str_hash(s: &str) -> u64 {
+pub(crate) fn str_hash(s: &str) -> u64 {
     let mut hasher = FxHasher::default();
     s.hash(&mut hasher);
     hasher.finish()
@@ -306,12 +316,12 @@ mod test {
 
     #[test]
     fn test_empty() {
-        let atom = HeapAtom::new("");
+        let atom = HeapAtom::new("", None);
         assert_eq!(atom.len(), 0);
         assert!(atom.is_empty());
         assert_eq!(atom.as_str(), "");
 
-        let atom2 = HeapAtom::new("");
+        let atom2 = HeapAtom::new("", None);
         // let atom2 = empty2.as_ref();
         assert_eq!(atom2.as_str(), "");
         assert_eq!(atom, atom2);
@@ -326,7 +336,7 @@ mod test {
 
     #[test]
     fn test_smol() {
-        let foo = HeapAtom::new("foo");
+        let foo = HeapAtom::new("foo", None);
         assert_eq!(foo.len(), 3);
         assert_eq!(foo.as_str(), "foo");
         assert_eq!(foo, foo);
