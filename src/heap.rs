@@ -185,8 +185,7 @@ impl HeapAtom {
 
         // TODO: use pad_to_align(). See rust issue https://github.com/rust-lang/rust/issues/67521
         let size_used = size_of::<Header>() + strlen as usize;
-        let padding_needed = (strlen as usize) % ALIGNMENT; // use next_multiple_of?
-        let size = size_used + padding_needed;
+        let size = size_used.next_multiple_of(ALIGNMENT);
 
         debug_assert!(size % ALIGNMENT == 0, "While getting HeapAtom layout, computed a size that was not 8-byte aligned");
         #[cfg(target_pointer_width = "32")]
