@@ -20,18 +20,15 @@
 extern crate assert_unchecked;
 
 mod heap;
+mod ptr;
 mod store;
 mod tags;
-mod ptr;
 
-use core::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher as _};
 use core::marker::PhantomData;
-use core::num::NonZeroU32;
-use core::ptr::NonNull;
-use std::borrow::Cow;
+
 // use std::hash::DefaultHasher;
-use heap::{Header, HeapAtom};
-use tags::{Tag, TaggedValue, MAX_INLINE_LEN};
+use heap::HeapAtom;
+use tags::{TaggedValue, MAX_INLINE_LEN};
 
 pub(crate) const ALIGNMENT: usize = 8;
 
@@ -48,7 +45,7 @@ impl Atom<'static> {
 
         Self {
             inner,
-            marker: PhantomData
+            marker: PhantomData,
         }
     }
     fn new_inline<S: AsRef<str>>(s: &S) -> Self {
@@ -66,13 +63,12 @@ impl Atom<'static> {
 
         Self {
             inner: value,
-            marker: PhantomData
+            marker: PhantomData,
         }
     }
 }
 
-impl<'a> Atom<'a> {
-}
+impl<'a> Atom<'a> {}
 
 // impl<'a> From<&'a str> for Atom<'a> {
 //     fn from(value: &'a str) -> Self {

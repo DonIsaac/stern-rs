@@ -1,7 +1,7 @@
 #![no_std]
 
-use core::{num::NonZeroU8, ptr::NonNull, slice};
 use assert_unchecked::assert_unchecked;
+use core::{num::NonZeroU8, ptr::NonNull, slice};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -26,7 +26,7 @@ impl Tag {
 /*
 ## Base representation:
 
-0000 0000 | 0000 0000 | 0000 0000 | 0000 0000 | 0000 0000 | 0000 0000 | 0000 0000 | 0000 00tt 
+0000 0000 | 0000 0000 | 0000 0000 | 0000 0000 | 0000 0000 | 0000 0000 | 0000 0000 | 0000 00tt
     0           1           2           3           4           5           6           7
 
 --------------------------------------------------------------------------------
@@ -38,7 +38,7 @@ objects.
 
 Tag is 0b00
 
-pppp pppp | pppp pppp | pppp pppp | pppp pppp | pppp pppp | pppp pppp | pppp pppp | pppp pp00  
+pppp pppp | pppp pppp | pppp pppp | pppp pppp | pppp pppp | pppp pppp | pppp pppp | pppp pp00
     0           1           2           3           4           5           6           7
 - p: pointer
 
@@ -63,7 +63,7 @@ idfk lmfao
 
 Tag is 0b10
 
-0000 0000 | 0000 0000 | 0000 0000 | 0000 0000 | 0000 0000 | 0000 0000 | 0000 0000 | 0000 0010 
+0000 0000 | 0000 0000 | 0000 0000 | 0000 0000 | 0000 0000 | 0000 0000 | 0000 0000 | 0000 0010
     0           1           2           3           4           5           6           7
 
 --------------------------------------------------------------------------------
@@ -76,7 +76,7 @@ NOTE: Current HeapAtom implementaiton may be problematic for pre-computed hashes
 
 Tag is 0b11
 
-pppp pppp | pppp pppp | pppp pppp | pppp pppp | pppp pppp | pppp pppp | pppp pppp | pppp pp11 
+pppp pppp | pppp pppp | pppp pppp | pppp pppp | pppp pppp | pppp pppp | pppp pppp | pppp pp11
     0           1           2           3           4           5           6           7
 */
 #[cfg(feature = "atom_size_128")]
@@ -120,14 +120,13 @@ pub(crate) struct TaggedValue {
 }
 static_assertions::assert_eq_align!(TaggedValue, u64);
 
-
 impl TaggedValue {
     const INLINE_DATA_LEN: usize = core::mem::size_of::<TaggedValue>() - 1;
 
     /// Do not use
     pub unsafe fn dangling() -> Self {
         TaggedValue {
-            value: RawTaggedNonZeroValue::dangling()
+            value: RawTaggedNonZeroValue::dangling(),
         }
     }
 
@@ -162,10 +161,10 @@ impl TaggedValue {
     pub fn new_inline(len: u8) -> Self {
         debug_assert!(len <= MAX_INLINE_LEN as u8);
         // let value = Tag::INLINE_NONZERO | len << (Tag::INLINE_LEN_OFFSET as NonZeroU8)
-        let tag_byte = Tag::INLINE_NONZERO | ((len as u8) << Tag::INLINE_LEN_OFFSET);
+        let tag_byte = Tag::INLINE_NONZERO | (len << Tag::INLINE_LEN_OFFSET);
         let value = tag_byte.get() as RawTaggedValue;
         Self {
-            value: unsafe { core::mem::transmute(value) }
+            value: unsafe { core::mem::transmute(value) },
         }
     }
     // unsafe fn new_tag_unchecked(value: &[u8]) -> Self {
@@ -174,22 +173,20 @@ impl TaggedValue {
     //     // let tag = INLINE_TAG_INIT | ((len as u8) << LEN_OFFSET);
 
     //     let tag_byte = Tag::INLINE_NONZERO | ((len as u8) << Tag::INLINE_LEN_OFFSET);
-    //     let raw_value = 
+    //     let raw_value =
     // }
 
     #[inline(always)]
     pub(crate) fn tag(&self) -> Tag {
         // NOTE: Dony does this, but tag mask is 0x03?
         // (self.get_value() & 0xff) as u8
-        unsafe {
-            Tag::new_unchecked((self.get_value() & Tag::MASK_USIZE) as u8)
-        }
+        unsafe { Tag::new_unchecked((self.get_value() & Tag::MASK_USIZE) as u8) }
     }
 
     #[inline(always)]
     fn get_value(&self) -> RawTaggedValue {
         unsafe { core::mem::transmute(Some(self.value)) }
-    } 
+    }
 
     pub fn data(&self) -> &[u8] {
         debug_assert_eq!(self.tag(), Tag::Inline);
@@ -218,6 +215,6 @@ impl TaggedValue {
                 data = data.offset(1);
             }
         }
-        slice::from_raw_parts_mut(data, Self::INLINE_DATA_LEN) 
+        slice::from_raw_parts_mut(data, Self::INLINE_DATA_LEN)
     }
 }

@@ -4,18 +4,17 @@
 extern crate alloc;
 
 use core::alloc::Layout;
-use core::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
+use core::hash::{Hash, Hasher};
 use core::mem::{size_of, transmute};
 use core::num::NonZeroU32;
-use core::ptr::{self, NonNull};
+use core::ptr::{self};
 use core::slice;
 use rustc_hash::FxHasher;
 
 // use alloc::alloc;
-use alloc::borrow::Cow;
 
 use crate::ptr::ReadonlyNonNull;
-use crate::{store, ALIGNMENT};
+use crate::ALIGNMENT;
 
 // pub struct HeapAtom {
 //     ptr: NonNull<u8>,
@@ -76,7 +75,7 @@ impl HeapAtom {
         let header = Header {
             len: s.len() as u32,                   // length of the string, in bytes
             store_id: NonZeroU32::new(1).unwrap(), // TODO
-            hash: str_hash(&s),                    // pre-computed hash
+            hash: str_hash(s),                     // pre-computed hash
         };
 
         let size = size_of::<Header>() + s.len(); // # of bytes to allocate
@@ -91,7 +90,7 @@ impl HeapAtom {
         // write the data to the heap
         unsafe {
             ptr::copy_nonoverlapping(&header, ptr as *mut Header, 1);
-            let string_ptr = ptr.offset(size_of::<Header>() as isize);
+            let string_ptr = ptr.add(size_of::<Header>());
             ptr::copy_nonoverlapping(s.as_ptr(), string_ptr, s.len());
         }
 
@@ -114,6 +113,11 @@ impl HeapAtom {
         };
 
         unsafe { transmute(ReadonlyNonNull::new_unchecked(&EMPTY as &Generic<[u8]>)) }
+    }
+
+    #[inline(always)]
+    pub fn hash(&self) -> u64 {
+        self.header.hash
     }
 
     pub fn as_str(&self) -> &str {
@@ -144,7 +148,7 @@ impl HeapAtom {
     }
 
     unsafe fn str_ptr(&self) -> *const u8 {
-        (self as *const _ as *const u8).offset(size_of::<Header>() as isize)
+        (self as *const _ as *const u8).add(size_of::<Header>())
     }
 }
 

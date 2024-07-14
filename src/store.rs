@@ -1,17 +1,12 @@
 extern crate alloc;
 
-use core::hash::{BuildHasher, BuildHasherDefault, Hasher};
+use alloc::sync::Arc;
+use core::hash::{BuildHasherDefault, Hasher};
 use core::num::NonZeroU32;
-use core::sync::atomic::{AtomicU32, Ordering}
+use core::sync::atomic::{AtomicU32, Ordering};
 use std::borrow::Cow;
-use alloc::sync::{Arc};
-use alloc::borrow::Borrow;
-use hashbrown::HashTable;
-use rustc_hash::FxBuildHasher;
 
 use crate::heap::HeapAtom;
-use crate::Atom;
-
 
 pub struct AtomStore {
     pub(crate) id: Option<NonZeroU32>,
@@ -24,39 +19,46 @@ impl Default for AtomStore {
         const STORE_CAPACITY: usize = 64;
 
         Self {
-            id: Some(unsafe { NonZeroU32::new_unchecked(ATOM_STORE_ID.fetch_add(1, Ordering::SeqCst)) }),
+            id: Some(unsafe {
+                NonZeroU32::new_unchecked(ATOM_STORE_ID.fetch_add(1, Ordering::SeqCst))
+            }),
             data: hashbrown::HashMap::with_capacity_and_hasher(STORE_CAPACITY, Default::default()),
         }
     }
 }
 
 impl AtomStore {
-    #[inline(always)]
-    pub fn atom<'a>(&mut self, text: impl Into<Cow<'a, str>>) -> Atom {
-        new_atom(self, text.into())
-    }
+    // #[inline(always)]
+    // pub fn atom<'a>(&mut self, text: impl Into<Cow<'a, str>>) -> Atom {
+    //     new_atom(self, text.into())
+    // }
 
     #[inline(never)]
-    fn insert_entry<'s>(&'s mut self, text: Cow<str>, hash: u64) -> Arc<Atom<'s>> {
-        let store_id = self.id;
+    fn insert_entry(&mut self, text: Cow<str>, hash: u64) -> Arc<HeapAtom> {
+        let _store_id = self.id;
         let (entry, _) = self
             .data
             .raw_entry_mut()
-            .from_hash(hash, |key| key.hash == hash && *key.string == *text)
+            .from_hash(hash, |key| key.hash() == hash && key.as_str() == text)
             .or_insert_with(move || {
                 (
-                    Arc::new(Entry {
-                        string: text.into_owned().into_boxed_str(),
-                        hash,
-                        store_id,
-                    }),
+                    unsafe { Arc::from_raw(HeapAtom::new_unchecked(&text).as_ptr()) },
                     (),
                 )
             });
+        // .or_insert_with(move || {
+        //     (
+        //         Arc::new(HeapAtom {
+        //             string: text.into_owned().into_boxed_str(),
+        //             hash,
+        //             store_id,
+        //         }),
+        //         (),
+        //     )
+        // });
         entry.clone()
     }
 }
-
 
 type BuildEntryHasher = BuildHasherDefault<EntryHasher>;
 

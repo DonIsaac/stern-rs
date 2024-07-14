@@ -1,5 +1,5 @@
 use core::mem::transmute;
-use core::ops::Deref;
+
 use core::ptr::NonNull;
 
 #[repr(transparent)]
