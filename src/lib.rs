@@ -39,15 +39,15 @@ pub struct Atom<'a> {
 }
 
 impl Atom<'static> {
-    fn new_heap<S: AsRef<str>>(s: &S) -> Self {
-        let atom = HeapAtom::new(s.as_ref());
-        let inner = unsafe { TaggedValue::new_ptr(atom.as_non_null()) };
+    // fn new_heap<S: AsRef<str>>(s: &S) -> Self {
+    //     let atom = HeapAtom::new(s.as_ref());
+    //     let inner = unsafe { TaggedValue::new_ptr(atom.as_non_null()) };
 
-        Self {
-            inner,
-            marker: PhantomData,
-        }
-    }
+    //     Self {
+    //         inner,
+    //         marker: PhantomData,
+    //     }
+    // }
     fn new_inline<S: AsRef<str>>(s: &S) -> Self {
         let s = s.as_ref();
         let len = s.len();
