@@ -75,10 +75,6 @@ impl Atom<'static> {
     fn new_inline_impl(s: &str) -> Self {
         let len = s.len();
         debug_assert!(len <= MAX_INLINE_LEN);
-        // let tag_byte = Tag::INLINE_NONZERO | ((len as u8) <<
-        // Tag::INLINE_LEN_OFFSET);
-        // let tag_byte = Tag::INLINE_NONZERO |
-        // let mut unsafe_data = TaggedValue::new_tag(tag);
         let mut value = TaggedValue::new_inline(len as u8);
         unsafe {
             value.data_mut()[..len].copy_from_slice(s.as_bytes());
@@ -112,13 +108,23 @@ impl<'a> Atom<'a> {}
 mod test {
     use super::*;
 
+    /// Atom whose length is on max inline boundary
+    fn largest_inline() -> Atom<'static> {
+        Atom::new("a".repeat(MAX_INLINE_LEN))
+    }
+
+    /// Atom whose length is just past the max inline boundary
+    fn smallest_heap() -> Atom<'static> {
+        Atom::new("a".repeat(MAX_INLINE_LEN + 1))
+    }
+
     #[test]
     fn test_inlining_on_small() {
         assert!(!Atom::new("").is_heap());
         assert!(!Atom::new("a").is_heap());
 
-        let on_boundary = Atom::new("a".repeat(MAX_INLINE_LEN));
-        assert!(!on_boundary.is_heap());
+        assert!(!largest_inline().is_heap());
+        assert!(smallest_heap().is_heap());
     }
 
     #[test]
@@ -127,5 +133,14 @@ mod test {
             Atom::new("a very long string that will most certainly be allocated on the heap")
                 .is_heap()
         );
+    }
+
+    #[test]
+    fn test_len() {
+        assert_eq!(Atom::empty().len(), 0);
+        assert_eq!(Atom::new("").len(), 0);
+        assert_eq!(Atom::new("a").len(), 1);
+        assert_eq!(largest_inline().len(), MAX_INLINE_LEN);
+        assert_eq!(smallest_heap().len(), MAX_INLINE_LEN + 1);
     }
 }
