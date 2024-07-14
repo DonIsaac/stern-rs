@@ -237,11 +237,6 @@ impl HeapAtom {
         self.header.len as usize
     }
 
-    #[inline]
-    pub const fn is_empty(&self) -> bool {
-        self.header.len == 0
-    }
-
     #[inline(always)]
     pub const fn hash(&self) -> u64 {
         self.header.hash
@@ -314,20 +309,18 @@ mod test {
     fn test_empty() {
         let atom = HeapAtom::new("", None);
         assert_eq!(atom.len(), 0);
-        assert!(atom.is_empty());
         assert_eq!(atom.as_str(), "");
 
         let atom2 = HeapAtom::new("", None);
-        // let atom2 = empty2.as_ref();
         assert_eq!(atom2.as_str(), "");
         assert_eq!(atom, atom2);
         assert_eq!(atom.as_str(), atom2.as_str());
 
-        // FIXME: causing sigsev
-        // assert_eq!(atom.as_str(), atom2.as_str());
-        // assert!(
-        //         !ptr::addr_eq(empty.as_ptr(), empty2.as_ptr())
-        // );
+        assert_eq!(atom.as_str(), atom2.as_str());
+        assert!(!ptr::addr_eq(
+            atom.as_ref() as *const _,
+            atom2.as_ref() as *const _
+        ));
     }
 
     #[test]

@@ -1,10 +1,9 @@
-#![no_std]
-
 use core::{num::NonZeroU8, ptr::NonNull, slice};
 use std::os::raw::c_void;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
+#[allow(dead_code)]
 pub(crate) enum Tag {
     HeapOwned = 0b_00,
     Inline = 0b_01,
@@ -24,11 +23,6 @@ impl Tag {
     pub const INLINE_LEN_OFFSET: u8 = 4;
 
     #[inline(always)]
-    pub const fn bits(self) -> u8 {
-        self as u8
-    }
-
-    #[inline(always)]
     pub const fn is_heap_owned(self) -> bool {
         matches!(self, Self::HeapOwned)
     }
@@ -37,14 +31,7 @@ impl Tag {
     pub const fn is_inline(self) -> bool {
         matches!(self, Self::Inline)
     }
-
-    #[inline(always)]
-    pub const fn is_static(self) -> bool {
-        matches!(self, Self::Static)
-    }
 }
-// const TAG_BYTE_MASK: NonZe = unsafe { RawTaggedNonZeroValue::new_unchecked(0xff);
-
 /*
 ## Base representation:
 
@@ -187,9 +174,6 @@ impl TaggedValue {
 
     #[inline(always)]
     pub const fn get_ptr(&self) -> *const c_void {
-        // debug_assert_eq!(self.tag(), Tag::HeapOwned);
-        // debug_assert!(matches!(self.))
-
         #[cfg(any(
             target_pointer_width = "32",
             target_pointer_width = "16",

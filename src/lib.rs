@@ -95,6 +95,11 @@ impl<'a> Atom<'a> {
         }
     }
 
+    #[inline]
+    pub const fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     fn get_hash(&self) -> u64 {
         match self.inner.tag() {
             Tag::HeapOwned => unsafe { HeapAtom::deref_from(self.inner) }.hash(),
@@ -123,6 +128,7 @@ impl<'a> Atom<'a> {
         }
     }
 
+    #[must_use]
     unsafe fn alias(&self) -> Self {
         debug_assert!(self.is_heap());
         let heap_atom = HeapAtom::deref_from(self.inner);
