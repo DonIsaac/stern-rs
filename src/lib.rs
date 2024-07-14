@@ -42,7 +42,7 @@ impl Atom<'static> {
     pub fn new<S: AsRef<str>>(s: S) -> Self {
         let s = s.as_ref();
         if s.len() <= MAX_INLINE_LEN {
-            Self::new_inline(s)
+            Self::new_inline_impl(s)
         } else {
             Self::new_heap(s)
         }
@@ -90,6 +90,16 @@ impl Atom<'static> {
         }
     }
 
+    pub fn len(&self) -> usize {
+        match self.inner.tag() {
+            Tag::HeapOwned => unsafe { HeapAtom::deref_from(self.inner) }.len(),
+            Tag::Inline => (self.inner.tag_byte() >> Tag::INLINE_LEN_OFFSET) as usize,
+            Tag::Static => {
+                todo!("Atom#len() for Tag::Static")
+            }
+        }
+    }
+
     #[inline(always)]
     pub(crate) fn is_heap(&self) -> bool {
         self.inner.tag() == Tag::HeapOwned
@@ -98,34 +108,24 @@ impl Atom<'static> {
 
 impl<'a> Atom<'a> {}
 
-// impl<'a> From<&'a str> for Atom<'a> {
-//     fn from(value: &'a str) -> Self {
-//         let ptr = value.as_ptr();
-//         let mut hasher = BuildHasherDefault::default();
-//         let hash = hasher.hash_one(value);
-//         let atom = Box::new(HeapAtom {
-//             hash,
-//             store_id: NonZerou32::new(1).unwrap(),
-//             string: *value
-//         });
-
-//         todo!()
-//     }
-// }
-// impl Atom {}
-
 #[cfg(test)]
 mod test {
     use super::*;
+
     #[test]
-    fn test_inlining() {
-        // let a = Atom::new("");
-        // let b = Atom::new("foo");
-        // let c = Atom::new("abcdefg");
-        // let c = Atom::new("abcdefgh");
+    fn test_inlining_on_small() {
         assert!(!Atom::new("").is_heap());
         assert!(!Atom::new("a").is_heap());
-        assert!(!Atom::new("abcdefg").is_heap());
-        assert!(Atom::new("abcdefgh").is_heap());
+
+        let on_boundary = Atom::new("a".repeat(MAX_INLINE_LEN));
+        assert!(!on_boundary.is_heap());
+    }
+
+    #[test]
+    fn test_inlining_on_large() {
+        assert!(
+            Atom::new("a very long string that will most certainly be allocated on the heap")
+                .is_heap()
+        );
     }
 }

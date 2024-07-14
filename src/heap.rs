@@ -10,20 +10,24 @@ use core::{fmt, slice};
 use rustc_hash::FxHasher;
 
 use crate::ptr::ReadonlyNonNull;
+use crate::tags::{Tag, TaggedValue};
 use crate::ALIGNMENT;
 
 #[derive(Debug)]
 #[repr(C)]
 pub struct Header {
+    /// Length of the string
     pub(crate) len: u32,
     pub(crate) store_id: Option<NonZeroU32>,
+    /// Pre-computed hash
     pub(crate) hash: u64,
 }
 static_assertions::const_assert!(size_of::<Header>() == 16);
 static_assertions::assert_eq_align!(Header, u64);
 
 impl Header {
-    fn new(s: &str, store_id: Option<NonZeroU32>) -> Self {
+    unsafe fn new_unchecked(s: &str, store_id: Option<NonZeroU32>) -> Self {
+        assert_unchecked!(s.len() < u32::MAX as usize, "string's length overflows u32");
         Self {
             len: s.len() as u32,
             store_id,
@@ -80,6 +84,7 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for SneakyArcInner<T> {
 }
 
 impl HeapAtom {
+    #[must_use]
     pub fn new(s: &str) -> ReadonlyNonNull<HeapAtom> {
         assert!(s.len() <= u32::MAX as usize, "string is too long");
         if s.is_empty() {
@@ -90,10 +95,11 @@ impl HeapAtom {
     }
 
     pub unsafe fn try_new_unchecked(s: &str) -> Result<ReadonlyNonNull<HeapAtom>, &'static str> {
-        let header = Header::new(s, None);
+        assert_unchecked!(s.len() < u32::MAX as usize);
+        let header = Header::new_unchecked(s, None);
 
         // let size = size_of::<Header>() + s.len(); // # of bytes to allocate
-        let layout = Self::get_layout(s.len());
+        let layout = Self::get_layout(header.len);
         debug_assert_eq!(layout.align(), 8);
         debug_assert!(layout.size() > 0); // should never happen
 
@@ -114,14 +120,15 @@ impl HeapAtom {
 
         // TODO: should we use Box semantics or NonNull semantics?
         // fat pointer to dynamically-sized type (DST)
-        let fat_dst: ReadonlyNonNull<HeapAtom> = unsafe {
+        let fat_ptr: ReadonlyNonNull<HeapAtom> = unsafe {
             let slice: &mut [u8] = slice::from_raw_parts_mut(ptr, layout.size());
             ReadonlyNonNull::new_unchecked(slice as *mut [u8] as *mut HeapAtom)
         };
 
-        Ok(fat_dst)
+        Ok(fat_ptr)
     }
 
+    #[must_use]
     unsafe fn zero_sized() -> ReadonlyNonNull<HeapAtom> {
         let empty: Generic<[u8; 0]> = Generic {
             header: Header::default(),
@@ -132,37 +139,59 @@ impl HeapAtom {
         ReadonlyNonNull::new_unchecked(transmute::<_, &HeapAtom>(fat_ptr) as *const _)
     }
 
+    pub const unsafe fn deref_from<'a>(tagged_ptr: TaggedValue) -> &'a HeapAtom {
+        // &*(tagged_ptr.get_ptr() as *const _)
+        debug_assert!(!matches!(tagged_ptr.tag(),Tag::HeapOwned), "cannot deref a non heap-owned tagged value");
+
+        let len: u32 = ptr::read(tagged_ptr.get_ptr().cast());
+        let fat_ptr = slice::from_raw_parts(tagged_ptr.get_ptr(), Self::sizeof(len));
+        transmute::<_, &'a HeapAtom>(fat_ptr)
+    }
+
+    // unsafe fn thin_dst(tagged_ptr: TaggedValue) -> *const HeapAtom {
+    //     debug_assert!(tagged_ptr.tag() == Tag::HeapOwned, "cannot deref a non heap-owned tagged value");
+    //     debug_assert!(!tagged_ptr.get_ptr().is_null());
+
+    //     let len: u32 = ptr::read(tagged_ptr.get_ptr().cast());
+    //     let fat_ptr = slice::from_raw_parts(tagged_ptr.get_ptr(), Self::sizeof(len));
+
+    //     transmute::<_, &HeapAtom>(fat_ptr.as_ref()) as *const _
+    // }
+
     #[inline]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.header.len as usize
     }
 
     #[inline]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.header.len == 0
     }
 
     #[inline(always)]
-    pub fn hash(&self) -> u64 {
+    pub const fn hash(&self) -> u64 {
         self.header.hash
     }
 
-    pub fn as_str(&self) -> &str {
+    pub const fn as_str(&self) -> &str {
         unsafe {
             let ptr = self.str_ptr();
             core::str::from_utf8_unchecked(slice::from_raw_parts(ptr, self.header.len as usize))
         }
     }
 
-    fn get_layout(strlen: usize) -> Layout {
-        debug_assert!(
-            strlen <= u32::MAX as usize,
-            "Strings longer than 2^32 are not supported"
-        );
+    #[must_use]
+    const fn get_layout(strlen: u32) -> Layout {
 
+        // TODO: use pad_to_align(). See rust issue https://github.com/rust-lang/rust/issues/67521
+        let size_used = size_of::<Header>() + strlen as usize;
+        let padding_needed = (strlen as usize) % ALIGNMENT; // use next_multiple_of?
+        let size = size_used + padding_needed;
+
+        debug_assert!(size % ALIGNMENT == 0, "While getting HeapAtom layout, computed a size that was not 8-byte aligned");
         #[cfg(target_pointer_width = "32")]
         {
-            assert!(strlen.next_multiple_of(ALIGNMENT) <= isize::MAX);
+            assert!(size <= isize::MAX);
         }
 
         // SAFETY:
@@ -170,11 +199,24 @@ impl HeapAtom {
         // 2. alignment is always a power of 2 b/c its a constant value of 8
         // 3. on 64bit machines, isize::MAX is always greater than u32::MAX. On
         //    32bit machines, the above assertion guarantees this invariant.
-        unsafe { Layout::from_size_align_unchecked(size_of::<Header>() + strlen, ALIGNMENT) }
-            .pad_to_align()
+        unsafe { Layout::from_size_align_unchecked(size_of::<Header>() + strlen as usize, ALIGNMENT) }
     }
 
-    unsafe fn str_ptr(&self) -> *const u8 {
+    #[inline(always)]
+    const fn sizeof(strlen: u32) -> usize {
+        Self::get_layout(strlen).size()
+    }
+
+    #[inline(always)]
+    const fn alloc_len(&self) -> usize {
+        Self::sizeof(self.header.len)
+    }
+
+    // const fn len_offset() -> usize {
+    //     Layout::from_size_align_unchecked(size_of::<Header>, ALIGNMENT)
+    // }
+
+    const unsafe fn str_ptr(&self) -> *const u8 {
         (self as *const _ as *const u8).add(size_of::<Header>())
     }
 }

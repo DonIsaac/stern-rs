@@ -2,6 +2,7 @@
 
 use assert_unchecked::assert_unchecked;
 use core::{num::NonZeroU8, ptr::NonNull, slice};
+use std::os::raw::c_void;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -13,14 +14,35 @@ pub(crate) enum Tag {
 
 impl Tag {
     #[inline(always)]
-    pub unsafe fn new_unchecked(value: u8) -> Self {
-        assert_unchecked!(value < 0b_11);
+    #[must_use]
+    pub const unsafe fn new_unchecked(value: u8) -> Self {
+        debug_assert!(value < 0b_11);
         core::mem::transmute(value)
     }
     pub const TAG_MASK: u8 = 0b_11;
     pub const MASK_USIZE: usize = Self::TAG_MASK as usize;
     pub const INLINE_NONZERO: NonZeroU8 = unsafe { NonZeroU8::new_unchecked(Self::Inline as u8) };
     pub const INLINE_LEN_OFFSET: u8 = 4;
+
+    #[inline(always)]
+    pub const fn bits(self) -> u8 {
+        self as u8
+    }
+
+    #[inline(always)]
+    pub const fn is_heap_owned(self) -> bool {
+        matches!(self, Self::HeapOwned)
+    }
+
+    #[inline(always)]
+    pub const fn is_inline(self) -> bool {
+        matches!(self, Self::Inline)
+    }
+
+    #[inline(always)]
+    pub const fn is_static(self) -> bool {
+        matches!(self, Self::Static)
+    }
 }
 // const TAG_BYTE_MASK: NonZe = unsafe { RawTaggedNonZeroValue::new_unchecked(0xff);
 
@@ -163,6 +185,31 @@ impl TaggedValue {
             value: unsafe { core::mem::transmute(value) },
         }
     }
+
+    #[inline(always)]
+    pub const fn get_ptr(&self) -> *const c_void {
+        // debug_assert_eq!(self.tag(), Tag::HeapOwned);
+        // debug_assert!(matches!(self.))
+
+        #[cfg(any(
+            target_pointer_width = "32",
+            target_pointer_width = "16",
+            feature = "atom_size_64",
+            feature = "atom_size_128"
+        ))]
+        {
+            self.value.get() as usize as _
+        }
+        #[cfg(not(any(
+            target_pointer_width = "32",
+            target_pointer_width = "16",
+            feature = "atom_size_64",
+            feature = "atom_size_128"
+        )))]
+        unsafe {
+            std::mem::transmute(Some(self.value))
+        }
+    }
     // unsafe fn new_tag_unchecked(value: &[u8]) -> Self {
     //     let len = value.len();
     //     debug_assert!(len <= MAX_INLINE_LEN);
@@ -179,19 +226,20 @@ impl TaggedValue {
     }
 
     #[inline(always)]
-    pub(crate) fn tag(&self) -> Tag {
+    pub(crate) const fn tag(&self) -> Tag {
         // NOTE: Dony does this, but tag mask is 0x03?
         // (self.get_value() & 0xff) as u8
         unsafe { Tag::new_unchecked((self.get_value() & Tag::MASK_USIZE) as u8) }
     }
 
     #[inline(always)]
-    fn get_value(&self) -> RawTaggedValue {
+    const fn get_value(&self) -> RawTaggedValue {
         unsafe { core::mem::transmute(Some(self.value)) }
     }
 
     pub fn data(&self) -> &[u8] {
-        debug_assert_eq!(self.tag(), Tag::Inline);
+        // debug_assert_eq!(self.tag(), Tag::Inline);
+        debug_assert!(self.tag().is_inline());
 
         let x: *const _ = &self.value;
         let mut data = x as *const u8;
@@ -206,7 +254,7 @@ impl TaggedValue {
     }
 
     pub unsafe fn data_mut(&mut self) -> &mut [u8] {
-        debug_assert_eq!(self.tag(), Tag::Inline);
+        debug_assert!(self.tag().is_inline());
 
         let x: *mut _ = &mut self.value;
         let mut data = x as *mut u8;
