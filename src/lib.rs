@@ -65,7 +65,7 @@ impl Atom<'static> {
     }
 
     fn new_heap(s: &str) -> Self {
-        let atom = HeapAtom::new(s.as_ref());
+        let atom = HeapAtom::new(s);
         let inner = unsafe { TaggedValue::new_ptr(atom.as_non_null()) };
 
         Self {

@@ -1,6 +1,5 @@
 #![no_std]
 
-use assert_unchecked::assert_unchecked;
 use core::{num::NonZeroU8, ptr::NonNull, slice};
 use std::os::raw::c_void;
 
