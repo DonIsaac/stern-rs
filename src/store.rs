@@ -71,7 +71,7 @@ impl AtomStore {
             .data
             .raw_entry_mut()
             .from_hash(hash, |key| key.hash() == hash && key.as_str() == text)
-            .or_insert_with(move || (unsafe { HeapAtom::new(text.as_ref(), store_id) }, ()));
+            .or_insert_with(move || (unsafe { HeapAtom::new(text, store_id) }, ()));
 
         entry.clone()
     }

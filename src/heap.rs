@@ -113,7 +113,7 @@ impl HeapAtom {
         store_id: Option<NonZeroU32>,
     ) -> Result<Arc<HeapAtom>, &'static str> {
         assert_unchecked!(s.len() < u32::MAX as usize);
-        let header = Header::new_unchecked(s, None);
+        let header = Header::new_unchecked(s, store_id);
 
         let layout = Self::get_layout(header.len);
         debug_assert_eq!(layout.align(), 8);
@@ -225,6 +225,11 @@ impl HeapAtom {
     pub unsafe fn restore_arc(tagged_ptr: TaggedValue) -> Arc<HeapAtom> {
         let raw_ref = Self::deref_from(tagged_ptr);
         Arc::from_raw(raw_ref as *const HeapAtom)
+    }
+
+    #[inline]
+    pub const fn store_id(&self) -> Option<NonZeroU32> {
+        self.header.store_id
     }
 
     #[inline]

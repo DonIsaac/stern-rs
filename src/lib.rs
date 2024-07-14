@@ -26,7 +26,7 @@ mod tags;
 #[cfg(test)]
 mod test;
 
-use core::{hash::Hash, marker::PhantomData, ops::Deref, ptr::NonNull};
+use core::{hash::Hash, marker::PhantomData, ops::Deref};
 
 use alloc::{borrow::Cow, sync::Arc};
 // use std::hash::DefaultHasher;
@@ -202,6 +202,23 @@ impl PartialEq for Atom<'_> {
 
         if self.get_hash() != other.get_hash() {
             return false;
+        }
+
+        if self.is_heap() && other.is_heap() {
+            let self_heap = unsafe { HeapAtom::deref_from(self.inner) };
+            let other_heap = unsafe { HeapAtom::deref_from(other.inner) };
+            // If the store is the same, the same string has same `unsafe_data``
+            match (&self_heap.store_id(), &other_heap.store_id()) {
+                (Some(this_store), Some(other_store)) => {
+                    if this_store == other_store {
+                        return false;
+                    }
+                }
+                (None, None) => {
+                    return false;
+                }
+                _ => {}
+            }
         }
 
         self.as_str() == self.as_str()
