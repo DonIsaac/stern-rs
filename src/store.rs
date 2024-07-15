@@ -32,7 +32,7 @@ pub struct AtomStore {
 impl Default for AtomStore {
     fn default() -> Self {
         static ATOM_STORE_ID: AtomicU32 = AtomicU32::new(1);
-        const STORE_CAPACITY: usize = 64;
+        const STORE_CAPACITY: usize = 256;
 
         Self {
             id: Some(unsafe {
