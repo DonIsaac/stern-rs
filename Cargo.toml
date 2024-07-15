@@ -6,7 +6,7 @@ repository  = "https://github.com/DonIsaac/stern-rs.git"
 keywords    = ["compact string", "small string", "string interning", "string"]
 categories  = ["compilers", "data-structures"]
 readme      = "README.md"
-author      = "Don Isaac"
+authors     = ["Don Isaac"]
 edition     = "2021"
 license     = "MIT"
 

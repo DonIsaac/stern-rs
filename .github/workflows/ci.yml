@@ -5,11 +5,15 @@ on:
     types: [opened, synchronize]
     branches:
       - main
+
   push:
     branches:
       - main
     paths-ignore:
       - "*.md"
+      - "*.yml"
+      - "*.yaml"
+      - "!.github/workflows/ci.yml"
 
 jobs:
 
@@ -37,7 +41,7 @@ jobs:
           components: clippy
           tools: taplo-cli
       - run: taplo lint
-      - run: cargo clippy -- -D warnings
+      - run: cargo clippy --all-features -- -D warnings
 
   doc:
     name: Doc
@@ -49,7 +53,9 @@ jobs:
         with:
           cache-key: warm
           components: rust-docs
-      - run: RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --document-private-items
+      - run: cargo doc --no-deps --document-private-items
+        env:
+          RUSTDOCFLAGS: '-D warnings'
 
   test:
     name: Test
@@ -64,8 +70,11 @@ jobs:
         with:
           cache-key: warm
           save-cache: ${{ github.ref_name == 'main' }}
-      - run: cargo check
-      - run: cargo test
+          tools: cargo-nextest
+      - run: cargo check --all-features
+      - run: cargo check --all-features --tests
+      - run: cargo nextest run --all-features
+      - run: cargo test --doc --all-features
 
 
 
