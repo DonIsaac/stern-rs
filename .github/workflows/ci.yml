@@ -2,6 +2,7 @@ name: CI Checks
 
 on:
   pull_request:
+    types: [opened, synchronize]
     branches:
       - main
   push:
@@ -30,7 +31,8 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: taiki-e/checkout-action@v1
+      # - uses: taiki-e/checkout-action@v1
+      - uses: actions/checkout@v4
       - uses: Boshen/setup-rust@main
         with:
           cache-key: warm
@@ -44,7 +46,8 @@ jobs:
       RUST_BACKTRACE: 1
       CARGO_INCREMENTAL: 0
     steps:
-      - uses: taiki-e/checkout-action@v1
+      # - uses: taiki-e/checkout-action@v1
+      - uses: actions/checkout@v4
       - uses: Boshen/setup-rust@main
         with:
           cache-key: warm
