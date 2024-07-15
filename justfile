@@ -19,3 +19,11 @@ lint-fix:
 
 doc:
     RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --document-private-items
+
+ready:
+    cargo fmt --check
+    cargo clippy --no-deps
+    cargo clippy --no-deps --features serde,nohash-hasher
+    cargo clippy --no-deps --features atom_size_128
+    cargo clippy --no-deps --features atom_size_64
+    cargo clippy --no-deps --features atom_size_32

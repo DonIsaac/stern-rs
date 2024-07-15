@@ -1,6 +1,11 @@
 #![allow(clippy::cast_possible_truncation)]
 
-use core::{mem::transmute, num::NonZeroU8, ptr::NonNull, slice};
+use core::{
+    mem::{size_of, transmute},
+    num::NonZeroU8,
+    ptr::NonNull,
+    slice,
+};
 use std::os::raw::c_void;
 
 #[cfg(all(feature = "atom_size_128", feature = "atom_size_64"))]
@@ -36,6 +41,7 @@ impl Tag {
     }
     pub const TAG_MASK: u8 = 0b_11;
     pub const MASK_USIZE: usize = Self::TAG_MASK as usize;
+    pub const MASK_RAW_VALUE: RawTaggedValue = Self::TAG_MASK as RawTaggedValue;
     pub const INLINE_NONZERO: NonZeroU8 = unsafe { NonZeroU8::new_unchecked(Self::Inline as u8) };
     pub const INLINE_LEN_OFFSET: u8 = 4;
 
@@ -135,7 +141,7 @@ type RawTaggedNonZeroValue = core::num::NonZeroU64;
     feature = "atom_size_64",
     feature = "atom_size_128"
 )))]
-type RawTaggedNonZeroValue = core::ptr::NonNull<()>;
+type RawTaggedNonZeroValue = NonNull<()>;
 
 pub(crate) const MAX_INLINE_LEN: usize = core::mem::size_of::<TaggedValue>() - 1;
 
@@ -144,10 +150,14 @@ pub(crate) const MAX_INLINE_LEN: usize = core::mem::size_of::<TaggedValue>() - 1
 pub(crate) struct TaggedValue {
     value: RawTaggedNonZeroValue,
 }
+
+#[cfg(feature = "atom_size_128")]
+static_assertions::assert_eq_align!(TaggedValue, u128);
+#[cfg(not(feature = "atom_size_128"))]
 static_assertions::assert_eq_align!(TaggedValue, u64);
 
 impl TaggedValue {
-    const INLINE_DATA_LEN: usize = core::mem::size_of::<TaggedValue>() - 1;
+    const INLINE_DATA_LEN: usize = size_of::<TaggedValue>() - 1;
 
     #[inline(always)]
     pub fn new_ptr<T: ?Sized>(value: NonNull<T>) -> Self {
@@ -158,7 +168,8 @@ impl TaggedValue {
             feature = "atom_size_128"
         ))]
         unsafe {
-            let value: std::num::NonZeroUsize = std::mem::transmute(value);
+            #[allow(clippy::transmute_int_to_non_zero)]
+            let value: core::num::NonZeroUsize = transmute(value.cast::<()>());
             Self {
                 value: RawTaggedNonZeroValue::new_unchecked(value.get() as _),
             }
@@ -185,7 +196,8 @@ impl TaggedValue {
         };
         let value = tag_byte.get() as RawTaggedValue;
         Self {
-            value: unsafe { core::mem::transmute(value) },
+            #[allow(clippy::transmute_int_to_non_zero)]
+            value: unsafe { transmute(value) },
         }
     }
 
@@ -212,6 +224,7 @@ impl TaggedValue {
     }
 
     #[inline(always)]
+    #[allow(clippy::unnecessary_cast)]
     pub const fn hash(self) -> u64 {
         self.get_value() as u64
     }
@@ -225,7 +238,7 @@ impl TaggedValue {
     pub(crate) const fn tag(self) -> Tag {
         // NOTE: Dony does this, but tag mask is 0x03?
         // (self.get_value() & 0xff) as u8
-        unsafe { Tag::new_unchecked((self.get_value() & Tag::MASK_USIZE) as u8) }
+        unsafe { Tag::new_unchecked((self.get_value() & Tag::MASK_RAW_VALUE) as u8) }
     }
 
     pub(crate) const fn len(self) -> usize {
@@ -236,7 +249,7 @@ impl TaggedValue {
 
     #[inline(always)]
     const fn get_value(self) -> RawTaggedValue {
-        unsafe { core::mem::transmute(Some(self.value)) }
+        unsafe { transmute(Some(self.value)) }
     }
 
     /// Get a slice to the data inlined in this [`TaggedValue`]
