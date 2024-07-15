@@ -3,6 +3,15 @@
 use core::{mem::transmute, num::NonZeroU8, ptr::NonNull, slice};
 use std::os::raw::c_void;
 
+#[cfg(all(feature = "atom_size_128", feature = "atom_size_64"))]
+compile_error!("feature \"atom_size_128\" and feature \"atom_size_64\" cannot be enabled at the same time.");
+
+#[cfg(all(feature = "atom_size_128", feature = "atom_size_32"))]
+compile_error!("feature \"atom_size_128\" and feature \"atom_size_32\" cannot be enabled at the same time.");
+
+#[cfg(all(feature = "atom_size_64", feature = "atom_size_32"))]
+compile_error!("feature \"atom_size_64\" and feature \"atom_size_32\" cannot be enabled at the same time.");
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 #[allow(dead_code)]
