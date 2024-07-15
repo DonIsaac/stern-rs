@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_truncation)]
+
 use core::{mem::transmute, num::NonZeroU8, ptr::NonNull, slice};
 use std::os::raw::c_void;
 
@@ -173,7 +175,7 @@ impl TaggedValue {
     }
 
     #[inline(always)]
-    pub const fn get_ptr(&self) -> *const c_void {
+    pub const fn get_ptr(self) -> *const c_void {
         #[cfg(any(
             target_pointer_width = "32",
             target_pointer_width = "16",
@@ -195,40 +197,30 @@ impl TaggedValue {
     }
 
     #[inline(always)]
-    pub const fn hash(&self) -> u64 {
+    pub const fn hash(self) -> u64 {
         self.get_value() as u64
     }
 
-    // unsafe fn new_tag_unchecked(value: &[u8]) -> Self {
-    //     let len = value.len();
-    //     debug_assert!(len <= MAX_INLINE_LEN);
-    //     // let tag = INLINE_TAG_INIT | ((len as u8) << LEN_OFFSET);
-
-    //     let tag_byte = Tag::INLINE_NONZERO | ((len as u8) << Tag::INLINE_LEN_OFFSET);
-    //     let raw_value =
-    // }
-
     #[inline(always)]
-    pub(crate) const fn tag_byte(&self) -> u8 {
-        // SAFETY:
+    pub(crate) const fn tag_byte(self) -> u8 {
         (self.get_value() & 0xff) as u8
     }
 
     #[inline(always)]
-    pub(crate) const fn tag(&self) -> Tag {
+    pub(crate) const fn tag(self) -> Tag {
         // NOTE: Dony does this, but tag mask is 0x03?
         // (self.get_value() & 0xff) as u8
         unsafe { Tag::new_unchecked((self.get_value() & Tag::MASK_USIZE) as u8) }
     }
 
-    pub(crate) const fn len(&self) -> usize {
+    pub(crate) const fn len(self) -> usize {
         debug_assert!(self.tag().is_inline());
 
         (self.tag_byte() >> Tag::INLINE_LEN_OFFSET) as usize
     }
 
     #[inline(always)]
-    const fn get_value(&self) -> RawTaggedValue {
+    const fn get_value(self) -> RawTaggedValue {
         unsafe { core::mem::transmute(Some(self.value)) }
     }
 
@@ -238,7 +230,7 @@ impl TaggedValue {
         debug_assert!(self.tag().is_inline());
 
         let x: *const _ = &self.value;
-        let mut data = x as *const u8;
+        let mut data = x.cast::<u8>();
         // All except the lowest byte, which is first in little-endian, last in
         // big-endian. That's where we store the tag.
         if cfg!(target_endian = "little") {
@@ -254,7 +246,7 @@ impl TaggedValue {
         debug_assert!(self.tag().is_inline());
 
         let x: *mut _ = &mut self.value;
-        let mut data = x as *mut u8;
+        let mut data = x.cast::<u8>();
         // All except the lowest byte, which is first in little-endian, last in
         // big-endian. That's where we store the tag.
         if cfg!(target_endian = "little") {

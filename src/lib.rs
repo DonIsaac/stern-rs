@@ -63,16 +63,18 @@ impl Atom<'static> {
         }
     }
 
+    /// # Panics
+    ///
+    /// If `s` is too long to be inlined.
     pub fn new_inline(s: &str) -> Self {
-        if s.len() > MAX_INLINE_LEN {
-            panic!("Cannot inline string '{s}' because its length exceeds the maximum inlineable length of {MAX_INLINE_LEN}");
-        }
+        assert!(s.len() <= MAX_INLINE_LEN, "Cannot inline string '{s}' because its length exceeds the maximum inlineable length of {MAX_INLINE_LEN}");
         Self::new_inline_impl(s)
     }
 
     pub(crate) fn new_inline_impl(s: &str) -> Self {
         let len = s.len();
         debug_assert!(len <= MAX_INLINE_LEN);
+        #[allow(clippy::cast_possible_truncation)]
         let mut value = TaggedValue::new_inline(len as u8);
         unsafe {
             value.as_bytes_mut()[..len].copy_from_slice(s.as_bytes());
@@ -86,6 +88,8 @@ impl Atom<'static> {
 }
 
 impl<'a> Atom<'a> {
+    #[must_use]
+    #[allow(clippy::missing_panics_doc)]
     pub const fn len(&self) -> usize {
         match self.inner.tag() {
             Tag::HeapOwned => unsafe { HeapAtom::deref_from(self.inner) }.len(),
@@ -101,6 +105,7 @@ impl<'a> Atom<'a> {
         self.len() == 0
     }
 
+    #[allow(clippy::missing_panics_doc)]
     fn get_hash(&self) -> u64 {
         match self.inner.tag() {
             Tag::HeapOwned => unsafe { HeapAtom::deref_from(self.inner) }.hash(),
@@ -116,6 +121,8 @@ impl<'a> Atom<'a> {
         self.inner.tag().is_heap_owned()
     }
 
+    #[must_use]
+    #[allow(clippy::missing_panics_doc)]
     pub fn as_str(&self) -> &str {
         match self.inner.tag() {
             Tag::HeapOwned => unsafe { HeapAtom::deref_from(self.inner) }.as_str(),
@@ -143,6 +150,7 @@ impl<'a> Atom<'a> {
 }
 
 impl<'a> Clone for Atom<'a> {
+    #[allow(clippy::missing_panics_doc)]
     fn clone(&self) -> Self {
         match self.inner.tag() {
             Tag::HeapOwned => unsafe { self.alias() },
@@ -194,7 +202,7 @@ impl Deref for Atom<'_> {
 impl Hash for Atom<'_> {
     #[inline]
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        state.write_u64(self.get_hash())
+        state.write_u64(self.get_hash());
     }
 }
 
