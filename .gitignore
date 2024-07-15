@@ -1,2 +1,15 @@
+# Build Artifacts
 /target
+
+# Temporary Files
 tmp/
+*.tmp
+
+# Editor Files
+.vscode/settings.json
+*.swp
+*.swo
+.idea
+
+# Misc
+.DS_Store
