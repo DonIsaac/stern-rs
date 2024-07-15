@@ -41,7 +41,7 @@ jobs:
           components: clippy
           tools: taplo-cli
       - run: taplo lint
-      - run: cargo clippy -- -D warnings
+      - run: cargo clippy --no-deps --features serde -- -D warnings
 
   doc:
     name: Doc
@@ -56,6 +56,21 @@ jobs:
       - run: cargo doc --no-deps --document-private-items
         env:
           RUSTDOCFLAGS: '-D warnings'
+
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      # - uses: taiki-e/checkout-action@v1
+      - uses: actions/checkout@v4
+      - uses: Boshen/setup-rust@main
+        with:
+          cache-key: warm
+      - run: cargo check
+      - run: cargo check --features serde nohash-hasher
+      - run: cargo check --features atom_size_128
+      - run: cargo check --features atom_size_64
+      - run: cargo check --features atom_size_32
 
   test:
     name: Test
