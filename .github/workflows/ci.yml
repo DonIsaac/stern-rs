@@ -41,7 +41,7 @@ jobs:
           components: clippy
           tools: taplo-cli
       - run: taplo lint
-      - run: cargo clippy --all-features -- -D warnings
+      - run: cargo clippy -- -D warnings
 
   doc:
     name: Doc
@@ -71,10 +71,10 @@ jobs:
           cache-key: warm
           save-cache: ${{ github.ref_name == 'main' }}
           tools: cargo-nextest
-      - run: cargo check --all-features
-      - run: cargo check --all-features --tests
-      - run: cargo nextest run --all-features
-      - run: cargo test --doc --all-features
+      - run: cargo check
+      - run: cargo check --tests
+      - run: cargo nextest run
+      - run: cargo test --doc
 
 
 

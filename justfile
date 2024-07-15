@@ -5,6 +5,9 @@ test:
     cargo nextest run --all-features
     cargo test --doc --all-features
 
+test-miri:
+    cargo +nightly miri nextest run --all-features
+
 lint:
     taplo lint
     cargo clippy --all-features
