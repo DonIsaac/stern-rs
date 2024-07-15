@@ -67,7 +67,7 @@ jobs:
         with:
           cache-key: warm
       - run: cargo check
-      - run: cargo check --features serde nohash-hasher
+      - run: cargo check --features serde,nohash-hasher
       - run: cargo check --features atom_size_128
       - run: cargo check --features atom_size_64
       - run: cargo check --features atom_size_32
