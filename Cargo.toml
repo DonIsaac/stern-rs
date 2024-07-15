@@ -40,5 +40,7 @@ must_use_candidate = "allow"
 # types (and vice versa). Only `*const as _ as *const T ` works (which is odd,
 # because that's exactly waht pointer::cast() does, but rustc does what rustc
 # does).
-ptr_as_ptr              = "allow"
-module_name_repetitions = "allow"
+ptr_as_ptr                    = "allow"
+ref_as_ptr                    = "allow"
+module_name_repetitions       = "allow"
+missing_transmute_annotations = "allow"
