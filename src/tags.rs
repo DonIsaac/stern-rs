@@ -1,28 +1,37 @@
-#![no_std]
-
-use assert_unchecked::assert_unchecked;
-use core::{num::NonZeroU8, ptr::NonNull, slice};
+use core::{mem::transmute, num::NonZeroU8, ptr::NonNull, slice};
+use std::os::raw::c_void;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
+#[allow(dead_code)]
 pub(crate) enum Tag {
-    Owned = 0b_00,
+    HeapOwned = 0b_00,
     Inline = 0b_01,
     Static = 0b_10,
 }
 
 impl Tag {
     #[inline(always)]
-    pub unsafe fn new_unchecked(value: u8) -> Self {
-        assert_unchecked!(value < 0b_11);
+    #[must_use]
+    pub const unsafe fn new_unchecked(value: u8) -> Self {
+        debug_assert!(value < 0b_11);
         core::mem::transmute(value)
     }
-    pub const MASK: u8 = 0b_11;
-    pub const MASK_USIZE: usize = Self::MASK as usize;
+    pub const TAG_MASK: u8 = 0b_11;
+    pub const MASK_USIZE: usize = Self::TAG_MASK as usize;
     pub const INLINE_NONZERO: NonZeroU8 = unsafe { NonZeroU8::new_unchecked(Self::Inline as u8) };
     pub const INLINE_LEN_OFFSET: u8 = 4;
-}
 
+    #[inline(always)]
+    pub const fn is_heap_owned(self) -> bool {
+        matches!(self, Self::HeapOwned)
+    }
+
+    #[inline(always)]
+    pub const fn is_inline(self) -> bool {
+        matches!(self, Self::Inline)
+    }
+}
 /*
 ## Base representation:
 
@@ -123,13 +132,6 @@ static_assertions::assert_eq_align!(TaggedValue, u64);
 impl TaggedValue {
     const INLINE_DATA_LEN: usize = core::mem::size_of::<TaggedValue>() - 1;
 
-    /// Do not use
-    pub unsafe fn dangling() -> Self {
-        TaggedValue {
-            value: RawTaggedNonZeroValue::dangling(),
-        }
-    }
-
     #[inline(always)]
     pub fn new_ptr<T: ?Sized>(value: NonNull<T>) -> Self {
         #[cfg(any(
@@ -158,15 +160,45 @@ impl TaggedValue {
         }
     }
 
-    pub fn new_inline(len: u8) -> Self {
+    pub const fn new_inline(len: u8) -> Self {
         debug_assert!(len <= MAX_INLINE_LEN as u8);
         // let value = Tag::INLINE_NONZERO | len << (Tag::INLINE_LEN_OFFSET as NonZeroU8)
-        let tag_byte = Tag::INLINE_NONZERO | (len << Tag::INLINE_LEN_OFFSET);
+        let tag_byte = unsafe {
+            NonZeroU8::new_unchecked(Tag::INLINE_NONZERO.get() | (len << Tag::INLINE_LEN_OFFSET))
+        };
         let value = tag_byte.get() as RawTaggedValue;
         Self {
             value: unsafe { core::mem::transmute(value) },
         }
     }
+
+    #[inline(always)]
+    pub const fn get_ptr(&self) -> *const c_void {
+        #[cfg(any(
+            target_pointer_width = "32",
+            target_pointer_width = "16",
+            feature = "atom_size_64",
+            feature = "atom_size_128"
+        ))]
+        {
+            self.value.get() as usize as _
+        }
+        #[cfg(not(any(
+            target_pointer_width = "32",
+            target_pointer_width = "16",
+            feature = "atom_size_64",
+            feature = "atom_size_128"
+        )))]
+        unsafe {
+            transmute(Some(self.value))
+        }
+    }
+
+    #[inline(always)]
+    pub const fn hash(&self) -> u64 {
+        self.get_value() as u64
+    }
+
     // unsafe fn new_tag_unchecked(value: &[u8]) -> Self {
     //     let len = value.len();
     //     debug_assert!(len <= MAX_INLINE_LEN);
@@ -177,19 +209,33 @@ impl TaggedValue {
     // }
 
     #[inline(always)]
-    pub(crate) fn tag(&self) -> Tag {
+    pub(crate) const fn tag_byte(&self) -> u8 {
+        // SAFETY:
+        (self.get_value() & 0xff) as u8
+    }
+
+    #[inline(always)]
+    pub(crate) const fn tag(&self) -> Tag {
         // NOTE: Dony does this, but tag mask is 0x03?
         // (self.get_value() & 0xff) as u8
         unsafe { Tag::new_unchecked((self.get_value() & Tag::MASK_USIZE) as u8) }
     }
 
+    pub(crate) const fn len(&self) -> usize {
+        debug_assert!(self.tag().is_inline());
+
+        (self.tag_byte() >> Tag::INLINE_LEN_OFFSET) as usize
+    }
+
     #[inline(always)]
-    fn get_value(&self) -> RawTaggedValue {
+    const fn get_value(&self) -> RawTaggedValue {
         unsafe { core::mem::transmute(Some(self.value)) }
     }
 
-    pub fn data(&self) -> &[u8] {
-        debug_assert_eq!(self.tag(), Tag::Inline);
+    /// Get a slice to the data inlined in this [`TaggedValue`]
+    pub fn as_bytes(&self) -> &[u8] {
+        // debug_assert_eq!(self.tag(), Tag::Inline);
+        debug_assert!(self.tag().is_inline());
 
         let x: *const _ = &self.value;
         let mut data = x as *const u8;
@@ -203,8 +249,9 @@ impl TaggedValue {
         unsafe { slice::from_raw_parts(data, Self::INLINE_DATA_LEN) }
     }
 
-    pub unsafe fn data_mut(&mut self) -> &mut [u8] {
-        debug_assert_eq!(self.tag(), Tag::Inline);
+    /// Get a mutable slice to the data inlined in this [`TaggedValue`]
+    pub unsafe fn as_bytes_mut(&mut self) -> &mut [u8] {
+        debug_assert!(self.tag().is_inline());
 
         let x: *mut _ = &mut self.value;
         let mut data = x as *mut u8;
