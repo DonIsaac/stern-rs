@@ -25,7 +25,7 @@ jobs:
           components: clippy
           tools: taplo-cli
       - run: taplo lint
-      - run: cargo lint -- -D warnings
+      - run: cargo fmt --all -- --check
 
   lint:
     name: Lint
@@ -37,7 +37,19 @@ jobs:
         with:
           cache-key: warm
           components: clippy
-      - run: cargo lint -- -D warnings
+      - run: cargo clippy -- -D warnings
+
+  doc:
+    name: Doc
+    runs-on: ubuntu-latest
+    steps:
+      # - uses: taiki-e/checkout-action@v1
+      - uses: actions/checkout@v4
+      - uses: Boshen/setup-rust@main
+        with:
+          cache-key: warm
+          components: rust-docs
+      - run: RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --document-private-items
 
   test:
     name: Test
