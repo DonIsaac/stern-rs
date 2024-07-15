@@ -21,7 +21,7 @@ use crate::Atom;
 /// been performed, which is why this is not a public API.
 pub(crate) fn atom(text: &str) -> Atom<'static> {
     thread_local! {
-        static GLOBAL_DATA: RefCell<AtomStore> = Default::default();
+        static GLOBAL_DATA: RefCell<AtomStore> = RefCell::default();
     }
 
     GLOBAL_DATA.with(|global| {
@@ -33,7 +33,7 @@ pub(crate) fn atom(text: &str) -> Atom<'static> {
 
 pub struct AtomStore {
     pub(crate) id: Option<NonZeroU32>,
-    pub(crate) data: hashbrown::HashMap<Arc<HeapAtom>, (), BuildEntryHasher>,
+    pub(crate) data: hashbrown::HashMap<Arc<HeapAtom>, (), BuildAtomHasher>,
 }
 
 impl Default for AtomStore {
@@ -45,7 +45,10 @@ impl Default for AtomStore {
             id: Some(unsafe {
                 NonZeroU32::new_unchecked(ATOM_STORE_ID.fetch_add(1, Ordering::SeqCst))
             }),
-            data: hashbrown::HashMap::with_capacity_and_hasher(STORE_CAPACITY, Default::default()),
+            data: hashbrown::HashMap::with_capacity_and_hasher(
+                STORE_CAPACITY,
+                BuildAtomHasher::default(),
+            ),
         }
     }
 }
@@ -65,7 +68,7 @@ impl AtomStore {
         let entry = Arc::into_raw(entry);
 
         // Safety: Arc::into_raw returns a non-null pointer
-        let ptr: NonNull<HeapAtom> = unsafe { NonNull::new_unchecked(entry as *mut HeapAtom) };
+        let ptr: NonNull<HeapAtom> = unsafe { NonNull::new_unchecked(entry.cast_mut()) };
         debug_assert!(0 == (ptr.as_ptr() as *const u8 as usize) & Tag::MASK_USIZE);
         Atom {
             inner: TaggedValue::new_ptr(ptr),
@@ -76,7 +79,7 @@ impl AtomStore {
     #[inline(never)]
     fn insert_entry(&mut self, text: &str, hash: u64) -> Arc<HeapAtom> {
         let store_id = self.id;
-        let (entry, _) = self
+        let (entry, ()) = self
             .data
             .raw_entry_mut()
             .from_hash(hash, |key| key.hash() == hash && key.as_str() == text)
@@ -86,9 +89,9 @@ impl AtomStore {
     }
 }
 
-type BuildEntryHasher = BuildHasherDefault<EntryHasher>;
+type BuildAtomHasher = BuildHasherDefault<EntryHasher>;
 
-/// A "no-op" hasher for [Entry] that returns [Entry::hash]. The design is
+/// A "no-op" hasher for [Entry] that returns [`Entry::hash`]. The design is
 /// inspired by the `nohash-hasher` crate.
 ///
 /// Assumption: [Arc]'s implementation of [Hash] is a simple pass-through.

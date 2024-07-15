@@ -1,3 +1,4 @@
+#![allow(clippy::cast_ptr_alignment)]
 extern crate alloc;
 
 use core::alloc::Layout;
@@ -31,6 +32,8 @@ static_assertions::assert_eq_align!(Header, u64);
 impl Header {
     unsafe fn new_unchecked(s: &str, store_id: Option<NonZeroU32>) -> Self {
         assert_unchecked!(s.len() < u32::MAX as usize, "string's length overflows u32");
+
+        #[allow(clippy::cast_possible_truncation)]
         Self {
             len: s.len() as u32,
             store_id,
@@ -106,7 +109,7 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for SneakyArcInner<T> {
 impl HeapAtom {
     #[must_use]
     pub fn new(s: &str, store_id: Option<NonZeroU32>) -> Arc<HeapAtom> {
-        assert!(s.len() <= u32::MAX as usize, "string is too long");
+        assert!(u32::try_from(s.len()).is_ok(), "string is too long");
         if s.is_empty() {
             return unsafe { Self::zero_sized() };
         }

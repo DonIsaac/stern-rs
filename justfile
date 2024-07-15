@@ -1,6 +1,6 @@
 lint:
     taplo lint
-    cargo clippy -- -W pedantic
+    cargo clippy
 
 lint-fix:
     cargo clippy --fix --allow-staged -- -W pedantic
