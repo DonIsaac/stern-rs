@@ -198,6 +198,9 @@ impl Hash for Atom<'_> {
     }
 }
 
+#[cfg(feature = "nohash-hasher")]
+impl nohash_hasher::IsEnabled for Atom<'_> {}
+
 impl PartialEq for Atom<'_> {
     #[inline(never)]
     fn eq(&self, other: &Self) -> bool {
@@ -268,6 +271,57 @@ impl Drop for Atom<'_> {
         if self.is_heap() {
             let heap_atom = unsafe { HeapAtom::restore_arc(self.inner) };
             drop(heap_atom);
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+mod serde_impls {
+    use super::Atom;
+    use serde::{de, Deserialize, Serialize};
+    use std::fmt;
+
+    impl Serialize for Atom<'_> {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            serializer.serialize_str(self.as_str())
+        }
+    }
+
+    impl<'de> Deserialize<'de> for Atom<'static> {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            deserializer.deserialize_str(AtomVisitor)
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, Default)]
+    struct AtomVisitor;
+
+    impl<'de> de::Visitor<'de> for AtomVisitor {
+        type Value = Atom<'static>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a borrowed string")
+        }
+
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Atom::new(v))
+        }
+        fn visit_char<E>(self, v: char) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            let mut buf = [0u8; 4];
+            let s = v.encode_utf8(&mut buf);
+            Ok(Atom::new_inline_impl(s))
         }
     }
 }

@@ -12,6 +12,13 @@ use crate::heap::{str_hash, HeapAtom};
 use crate::tags::{Tag, TaggedValue, MAX_INLINE_LEN};
 use crate::Atom;
 
+/// Creates a new [`Atom`] using this thread's global [`AtomStore`].
+///
+/// This function does not necessarily create a new [`HeapAtom`]; if `text` is
+/// already in the store, it will be re-used.
+///
+/// This method always creates [`HeapAtom`]s. It assumes SSO checks have already
+/// been performed, which is why this is not a public API.
 pub(crate) fn atom(text: &str) -> Atom<'static> {
     thread_local! {
         static GLOBAL_DATA: RefCell<AtomStore> = Default::default();
@@ -20,7 +27,7 @@ pub(crate) fn atom(text: &str) -> Atom<'static> {
     GLOBAL_DATA.with(|global| {
         let mut store = global.borrow_mut();
 
-        store.atom(text)
+        store.add_atom(text)
     })
 }
 
@@ -49,6 +56,10 @@ impl AtomStore {
         if s.len() <= MAX_INLINE_LEN {
             return Atom::new_inline_impl(s);
         }
+        self.add_atom(s)
+    }
+
+    pub(crate) fn add_atom(&mut self, s: &str) -> Atom<'static> {
         let hash = str_hash(s);
         let entry = self.insert_entry(s, hash);
         let entry = Arc::into_raw(entry);
