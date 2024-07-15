@@ -1,0 +1,55 @@
+name: CI Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "*.md"
+
+jobs:
+
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: taiki-e/checkout-action@v1
+      - uses: Boshen/setup-rust@main
+        with:
+          cache-key: warm
+          components: clippy
+          tools: taplo-cli
+      - run: taplo lint
+      - run: cargo lint -- -D warnings
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: taiki-e/checkout-action@v1
+      - uses: Boshen/setup-rust@main
+        with:
+          cache-key: warm
+          components: clippy
+      - run: cargo lint -- -D warnings
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    env:
+      RUST_BACKTRACE: 1
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: taiki-e/checkout-action@v1
+      - uses: Boshen/setup-rust@main
+        with:
+          cache-key: warm
+          save-cache: ${{ github.ref_name == 'main' }}
+      - run: cargo check
+      - run: cargo test
+
+
+
