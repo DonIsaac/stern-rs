@@ -1,6 +1,11 @@
 #![allow(clippy::cast_possible_truncation)]
 
-use core::{mem::{size_of, transmute}, num::{self, NonZeroU8}, ptr::NonNull, slice};
+use core::{
+    mem::{size_of, transmute},
+    num::NonZeroU8,
+    ptr::NonNull,
+    slice,
+};
 use std::os::raw::c_void;
 
 #[cfg(all(feature = "atom_size_128", feature = "atom_size_64"))]
@@ -123,13 +128,13 @@ type RawTaggedValue = u64;
 type RawTaggedValue = usize;
 
 #[cfg(feature = "atom_size_128")]
-type RawTaggedNonZeroValue = num::NonZeroU128;
+type RawTaggedNonZeroValue = core::num::NonZeroU128;
 #[cfg(any(
     target_pointer_width = "32",
     target_pointer_width = "16",
     feature = "atom_size_64"
 ))]
-type RawTaggedNonZeroValue = num::NonZeroU64;
+type RawTaggedNonZeroValue = core::num::NonZeroU64;
 #[cfg(not(any(
     target_pointer_width = "32",
     target_pointer_width = "16",
@@ -163,7 +168,8 @@ impl TaggedValue {
             feature = "atom_size_128"
         ))]
         unsafe {
-            let value: num::NonZeroUsize = transmute(value.cast::<()>());
+            #[allow(clippy::transmute_int_to_non_zero)]
+            let value: core::num::NonZeroUsize = transmute(value.cast::<()>());
             Self {
                 value: RawTaggedNonZeroValue::new_unchecked(value.get() as _),
             }
@@ -190,6 +196,7 @@ impl TaggedValue {
         };
         let value = tag_byte.get() as RawTaggedValue;
         Self {
+            #[allow(clippy::transmute_int_to_non_zero)]
             value: unsafe { transmute(value) },
         }
     }
@@ -217,6 +224,7 @@ impl TaggedValue {
     }
 
     #[inline(always)]
+    #[allow(clippy::unnecessary_cast)]
     pub const fn hash(self) -> u64 {
         self.get_value() as u64
     }
