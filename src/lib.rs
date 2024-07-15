@@ -42,6 +42,8 @@ pub struct Atom<'a> {
     inner: TaggedValue,
     marker: PhantomData<&'a ()>,
 }
+unsafe impl Send for Atom<'static> {}
+unsafe impl Sync for Atom<'static> {}
 
 impl Atom<'static> {
     pub fn new<S: AsRef<str>>(s: S) -> Self {
@@ -231,6 +233,7 @@ impl PartialEq for Atom<'_> {
         self.as_str() == self.as_str()
     }
 }
+impl Eq for Atom<'_> {}
 
 impl PartialEq<str> for Atom<'_> {
     #[inline]
