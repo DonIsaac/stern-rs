@@ -91,7 +91,7 @@ impl AtomStore {
 
 type BuildAtomHasher = BuildHasherDefault<EntryHasher>;
 
-/// A "no-op" hasher for [Entry] that returns [`Entry::hash`]. The design is
+/// A "no-op" hasher for [`HeapAtom`] that returns [`HeapAtom::hash`]. The design is
 /// inspired by the `nohash-hasher` crate.
 ///
 /// Assumption: [Arc]'s implementation of [Hash] is a simple pass-through.
