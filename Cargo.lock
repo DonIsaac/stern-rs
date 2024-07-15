@@ -49,16 +49,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
 
 [[package]]
-name = "oxstr"
-version = "0.1.0"
-dependencies = [
- "assert-unchecked",
- "hashbrown",
- "rustc-hash",
- "static_assertions",
-]
-
-[[package]]
 name = "proc-macro2"
 version = "1.0.86"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -87,6 +77,16 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "stern"
+version = "0.1.0"
+dependencies = [
+ "assert-unchecked",
+ "hashbrown",
+ "rustc-hash",
+ "static_assertions",
+]
 
 [[package]]
 name = "syn"
