@@ -105,6 +105,7 @@ jobs:
         run: |
           rustup toolchain install nightly --no-self-update --profile minimal --component miri
           rustup override set nightly
+      - run: rustup component add rust-src
       - name: Install Nextest
         uses: taiki-e/install-action@nextest
       - name: Cache on ${{ github.ref_name }}
