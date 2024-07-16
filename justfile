@@ -18,9 +18,9 @@ lint:
 
 # Fix lint violations. Worktree must be clean/staged.
 lint-fix:
-    cargo clippy --fix --allow-staged
+    cargo clippy --no-deps --fix --allow-staged
     taplo fmt
-    cargo fmt --fix
+    cargo fmt
 
 doc:
     RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --document-private-items

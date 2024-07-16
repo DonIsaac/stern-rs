@@ -167,7 +167,8 @@ impl HeapAtom {
             // seems to help, but not fully fix it? needs investigation.
             // NOTE: ^ this only gets detected by Miri. Functional tests work
             // both before and after.
-            let slice: &mut [usize] = slice::from_raw_parts_mut(ptr as *mut usize, layout.size() / size_of::<usize>());
+            let slice: &mut [usize] =
+                slice::from_raw_parts_mut(ptr as *mut usize, layout.size() / size_of::<usize>());
             let fat_raw = slice as *mut [usize] as *mut SneakyArcInner<HeapAtom>;
             #[cfg(debug_assertions)]
             {
@@ -358,10 +359,16 @@ mod test {
 
     #[test]
     fn test_long() {
-        let atom = HeapAtom::new("this is a long string with an odd number of characters.", None);
+        let atom = HeapAtom::new(
+            "this is a long string with an odd number of characters.",
+            None,
+        );
 
         assert_eq!(atom.len(), 55);
-        assert_eq!(atom.as_str(), "this is a long string with an odd number of characters.");
+        assert_eq!(
+            atom.as_str(),
+            "this is a long string with an odd number of characters."
+        );
         assert_eq!(atom, atom);
     }
 
