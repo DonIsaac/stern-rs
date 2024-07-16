@@ -112,9 +112,9 @@ jobs:
         with:
           shared-key: warm-nightly
           save-if: ${{ github.ref_name == 'main' }}
-      - run: cargo check --tests
-      - run: cargo test --no-run
-      - name: Miri
+      - name: Miri Setup
+        run: cargo miri setup
+      - name: Miri Test
         run: |
           cargo miri nextest run
           cargo miri test --doc
