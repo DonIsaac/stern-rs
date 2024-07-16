@@ -86,10 +86,37 @@ jobs:
           cache-key: warm
           save-cache: ${{ github.ref_name == 'main' }}
           tools: cargo-nextest
-      - run: cargo check
       - run: cargo check --tests
+      - run: cargo test --no-run
       - run: cargo nextest run
       - run: cargo test --doc
 
+  miri:
+    name: Miri
+    runs-on: ubuntu-latest
+    env:
+      RUST_BACKTRACE: 1
+      CARGO_INCREMENTAL: 0
+      MIRIFLAGS: "-Zmiri-strict-provenance"
+    steps:
+      # - uses: taiki-e/checkout-action@v1
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: |
+          rustup toolchain install nightly --no-self-update --profile minimal --component miri
+          rustup override set nightly
+      - name: Install Nextest
+        uses: taiki-e/install-action@nextest
+      - name: Cache on ${{ github.ref_name }}
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: warm-nightly
+          save-if: ${{ github.ref_name == 'main' }}
+      - run: cargo check --tests
+      - run: cargo test --no-run
+      - name: Miri
+        run: |
+          cargo miri nextest run
+          cargo miri test --doc
 
 
