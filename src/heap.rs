@@ -136,7 +136,7 @@ impl HeapAtom {
             return Err("OOM: HeapAtom allocation returned null");
         }
         debug_assert!(
-            ptr as usize % 8 == 0,
+            ptr as usize % ALIGNMENT == 0,
             "pointer for new HeapAtom is not 8-byte aligned"
         );
 
@@ -163,6 +163,13 @@ impl HeapAtom {
         let fat_ptr: Arc<HeapAtom> = unsafe {
             let slice: &mut [u8] = slice::from_raw_parts_mut(ptr, layout.size());
             let fat_raw = slice as *mut [u8] as *mut SneakyArcInner<HeapAtom>;
+            #[cfg(debug_assertions)]
+            {
+                let fat_layout = Layout::for_value(fat_raw.as_ref().unwrap());
+                assert_eq!(fat_layout.align(), ALIGNMENT);
+                // FIXME
+                // assert_eq!(fat_layout.size(), layout.size());
+            }
             // let fat_atom: *mut HeapAtom =
             // fat_raw.byte_add(Self::data_offset()) as *mut _;
             let fat_atom = SneakyArcInner::into_data_ptr_mut(fat_raw);
@@ -197,6 +204,7 @@ impl HeapAtom {
         // compensate by adding the same offset. This only works if, among other
         // things, the pointer offset is 8.
         let atom_ptr = unsafe { SneakyArcInner::into_data_ptr(raw_ptr) };
+        debug_assert!(atom_ptr.is_aligned());
 
         // ensure layout is correct
         #[cfg(debug_assertions)]
@@ -336,8 +344,24 @@ mod test {
     #[test]
     fn test_smol() {
         let foo = HeapAtom::new("foo", None);
+
         assert_eq!(foo.len(), 3);
         assert_eq!(foo.as_str(), "foo");
         assert_eq!(foo, foo);
+    }
+
+    #[test]
+    fn test_counted_references() {
+        let normal_arc = Arc::new("foo");
+        let foo = HeapAtom::new("foo", None);
+        let empty = unsafe { HeapAtom::zero_sized() };
+
+        // should have the same strong/weak ref count as a normally constructed
+        // Arc
+        assert_eq!(Arc::strong_count(&foo), Arc::strong_count(&normal_arc));
+        assert_eq!(Arc::weak_count(&foo), Arc::weak_count(&normal_arc));
+
+        assert_eq!(Arc::strong_count(&empty), Arc::strong_count(&normal_arc));
+        assert_eq!(Arc::weak_count(&empty), Arc::weak_count(&normal_arc));
     }
 }
