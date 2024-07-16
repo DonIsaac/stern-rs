@@ -103,9 +103,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install toolchain
         run: |
-          rustup toolchain install nightly --no-self-update --profile minimal --component miri
+          rustup toolchain install nightly --no-self-update --profile minimal --component miri --component rust-src
           rustup override set nightly
-      - run: rustup component add rust-src
       - name: Install Nextest
         uses: taiki-e/install-action@nextest
       - name: Cache on ${{ github.ref_name }}
