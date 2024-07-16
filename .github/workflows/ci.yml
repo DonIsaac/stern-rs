@@ -15,8 +15,10 @@ on:
       - "*.yaml"
       - "!.github/workflows/ci.yml"
 
-jobs:
+env:
+  CARGO_TERM_COLOR: "always"
 
+jobs:
   format:
     name: Format
     runs-on: ubuntu-latest
@@ -91,5 +93,35 @@ jobs:
       - run: cargo nextest run
       - run: cargo test --doc
 
+  miri:
+    name: Test (Miri)
+    runs-on: ubuntu-latest
+    env:
+      RUST_BACKTRACE: 1
+      CARGO_INCREMENTAL: 0
+      MIRIFLAGS: "-Zmiri-strict-provenance"
+    steps:
+      # - uses: taiki-e/checkout-action@v1
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: |
+          rustup toolchain install nightly --no-self-update --profile minimal --component miri
+          rustup override set nightly
 
+      - name: Install cargo-extest
+        uses: taiki-e/install-action@nextest
+
+      - name: Cache on ${{ github.ref_name }}
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: warm-nightly
+          save-if: ${{ github.ref_name == 'main' }}
+
+      - name: Pre-check
+        run: cargo check --tests
+
+      - name: Miri
+        run: |
+          cargo miri nextest run
+          cargo miri test --doc
 

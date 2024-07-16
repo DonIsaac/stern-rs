@@ -8,6 +8,8 @@ use core::num::NonZeroU32;
 use core::ptr::{self};
 use core::sync::atomic;
 use core::{fmt, slice};
+use std::mem::MaybeUninit;
+use std::ptr::NonNull;
 use rustc_hash::FxHasher;
 
 use alloc::sync::Arc;
@@ -86,15 +88,20 @@ impl<T: ?Sized> SneakyArcInner<T> {
     #[inline(always)]
     #[must_use]
     const unsafe fn into_data_ptr(ptr: *const Self) -> *const T {
-        ptr.byte_add(size_of::<SneakyArcInner<()>>()) as *const _
+        let data_ptr = ptr.byte_add(ARC_OVERHEAD) as *const T;
+        // debug_assert!(data_ptr.addr() % ALIGNMENT == 0);
+        // debug_assert_ne!(slice::from_raw_parts_mut(data, len)).len(), (ptr.as_ref as &[u8]).len());
+        data_ptr
     }
 
     #[inline(always)]
     #[must_use]
     const unsafe fn into_data_ptr_mut(ptr: *mut Self) -> *mut T {
-        ptr.byte_add(size_of::<SneakyArcInner<()>>()) as *mut _
+        ptr.byte_add(ARC_OVERHEAD) as *mut _
     }
 }
+type EmptyArcInner = SneakyArcInner<()>;
+const ARC_OVERHEAD: usize = size_of::<EmptyArcInner>();
 
 impl<T: ?Sized + fmt::Debug> fmt::Debug for SneakyArcInner<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -118,6 +125,7 @@ impl HeapAtom {
     }
 
     #[inline(never)]
+    #[no_mangle]
     pub unsafe fn try_new_unchecked(
         s: &str,
         store_id: Option<NonZeroU32>,
@@ -128,19 +136,22 @@ impl HeapAtom {
         let layout = Self::get_layout(header.len);
         debug_assert_eq!(layout.align(), 8);
         debug_assert!(layout.size() > 0); // should never happen
+        println!("layout {:?}", layout);
 
         // SAFETY:
         // - Layout will never be zero-sized because Header's size is non-zero
-        let ptr: *mut u8 = unsafe { alloc::alloc::alloc(layout) };
+        // let ptr: *mut u8 = unsafe { alloc::alloc::alloc(layout) };
+        let ptr = unsafe { alloc::alloc::alloc(layout) as *mut ()};
         if ptr.is_null() {
             return Err("OOM: HeapAtom allocation returned null");
         }
         debug_assert!(
-            ptr as usize % 8 == 0,
+            ptr as *const _ as usize % 8 == 0,
             "pointer for new HeapAtom is not 8-byte aligned"
         );
+        // let ptr = MaybeUninit::new(NonNull::new_unchecked(ptr));
 
-        let arc_inner: SneakyArcInner<()> = SneakyArcInner {
+        let arc_inner: EmptyArcInner = SneakyArcInner {
             strong: atomic::AtomicUsize::new(1),
             weak: atomic::AtomicUsize::new(1),
             data: (),
@@ -149,27 +160,60 @@ impl HeapAtom {
         // write the data to the heap
         unsafe {
             // ArcInner
-            ptr::copy_nonoverlapping(&arc_inner, ptr as *mut SneakyArcInner<()>, 1);
+            ptr::copy_nonoverlapping(&arc_inner, ptr as *mut EmptyArcInner, 1);
             // Header
-            let header_ptr = ptr.byte_add(size_of::<SneakyArcInner<()>>()) as *mut Header;
+            let header_ptr = ptr.byte_add(ARC_OVERHEAD) as *mut Header;
             ptr::copy_nonoverlapping(&header, header_ptr, 1);
             // HeapAtom
             let string_ptr = header_ptr.byte_add(size_of::<Header>()) as *mut u8;
             ptr::copy_nonoverlapping(s.as_ptr(), string_ptr, s.len());
         }
+        // ptr.as_mut().strong = atomic::AtomicUsize::new(1);
+        // ptr.write
 
         // TODO: should we use Box semantics or NonNull semantics?
         // fat pointer to dynamically-sized type (DST)
         let fat_ptr: Arc<HeapAtom> = unsafe {
-            let slice: &mut [u8] = slice::from_raw_parts_mut(ptr, layout.size());
-            let fat_raw = slice as *mut [u8] as *mut SneakyArcInner<HeapAtom>;
-            // let fat_atom: *mut HeapAtom =
-            // fat_raw.byte_add(Self::data_offset()) as *mut _;
-            let fat_atom = SneakyArcInner::into_data_ptr_mut(fat_raw);
-            Arc::from_raw(fat_atom)
+            // let slice: &mut [usize] = slice::from_raw_parts_mut(ptr as *mut usize, layout.size() / size_of::<usize>());
+            let slice: &mut [u8] = slice::from_raw_parts_mut(ptr as *mut u8, layout.size());
+            // let fat
+            // println!("slice: {:?}", Layout::for_value(slice));
+            // let fat_raw = ptr as *mut _ as *mut SneakyArcInner<HeapAtom>;
+            // println!("fat_raw ptr: {:?}", Layout::for_value(fat_raw.as_ref().unwrap()));
+            // let fat_raw = slice as *mut [u8] as *mut
+            // SneakyArcInner<HeapAtom>;
+            let fat_raw: *mut SneakyArcInner<HeapAtom> = transmute::<_, &mut SneakyArcInner<HeapAtom>>(slice);
+            println!("fat_raw ptr: {:?}", Layout::for_value(fat_raw.as_ref().unwrap()));
+            let mut fat_raw = NonNull::new_unchecked(fat_raw);
+            println!("fat_raw NonNull: {:?}", Layout::for_value(fat_raw.as_ref()));
+
+            // // fat_raw's size changes after this cast. It's increased by 32
+            // // bytes for some reason.
+            // let casted_layout = Layout::for_value(fat_raw.as_ref());
+            // println!("casted_layout: {:?}", casted_layout);
+            // if layout.size() != casted_layout.size() {
+            //     debug_assert!(casted_layout.size() > layout.size(), "expected: {} > {}", casted_layout.size(), layout.size());
+            //     let offset_needed = casted_layout.size() - layout.size();
+            //     println!("offset needed: {offset_needed}");
+            //     let new = NonNull::new_unchecked(fat_raw.as_ptr().byte_sub(offset_needed));
+            //     println!("fat_raw after shift: {:?}", Layout::for_value(new.as_ref()));
+            //     fat_raw = new
+            // }
+
+            let fat_atom = SneakyArcInner::into_data_ptr_mut(fat_raw.as_ptr());
+            // println!("fat_atom: {:?}", Layout::for_value(fat_atom.as_ref().unwrap()));
+            debug_assert!(!fat_atom.is_null());
+
+            let arc = Arc::from_raw(fat_atom);
+            debug_assert!(ptr::addr_eq(arc.as_ref() as *const _, fat_atom));
+            debug_assert_eq!(Layout::for_value(arc.as_ref()).size(), layout.size() - ARC_OVERHEAD);
+            debug_assert_eq!(Layout::for_value(arc.as_ref()).align(), layout.align());
+
+            arc
         };
 
         // ensure layout integrity
+        debug_assert_eq!(Arc::strong_count(&fat_ptr), 1);
         debug_assert_eq!(fat_ptr.len(), s.len());
         debug_assert_eq!(fat_ptr.as_str(), s);
 
@@ -197,6 +241,7 @@ impl HeapAtom {
         // compensate by adding the same offset. This only works if, among other
         // things, the pointer offset is 8.
         let atom_ptr = unsafe { SneakyArcInner::into_data_ptr(raw_ptr) };
+        debug_assert!(atom_ptr.is_aligned());
 
         // ensure layout is correct
         #[cfg(debug_assertions)]
@@ -261,8 +306,11 @@ impl HeapAtom {
 
     #[must_use]
     const fn get_layout(strlen: u32) -> Layout {
-        // TODO: use pad_to_align(). See rust issue https://github.com/rust-lang/rust/issues/67521
-        let size_used = size_of::<SneakyArcInner<()>>() + size_of::<Header>() + strlen as usize;
+        const OVERHEAD: usize = ARC_OVERHEAD + size_of::<Header>();
+        // TODO: use pad_to_align(). See rust issue
+        // https://github.com/rust-lang/rust/issues/67521
+
+        let size_used = OVERHEAD + (strlen as usize);
         let size = size_used.next_multiple_of(ALIGNMENT);
 
         debug_assert!(
@@ -320,6 +368,8 @@ mod test {
         let atom = HeapAtom::new("", None);
         assert_eq!(atom.len(), 0);
         assert_eq!(atom.as_str(), "");
+        assert_eq!(Arc::strong_count(&atom), 1);
+        assert_eq!(Arc::weak_count(&atom), 0); // FIXME: should this be 1?
 
         let atom2 = HeapAtom::new("", None);
         assert_eq!(atom2.as_str(), "");
@@ -331,13 +381,27 @@ mod test {
             atom.as_ref() as *const _,
             atom2.as_ref() as *const _
         ));
+        assert_eq!(Arc::strong_count(&atom), 1);
+        assert_eq!(Arc::weak_count(&atom), 0);
     }
 
     #[test]
     fn test_smol() {
+        // println!("usize: {}", size_of::<usize>());
+        // println!("atomic usize: {}", size_of::<atomic::AtomicUsize>());
+        // println!("tagged value: {}", size_of::<TaggedValue>());
+        // println!("u: {}", size_of::<usize>());
         let foo = HeapAtom::new("foo", None);
+        // Arc initialized through public API
+        let normal_arc = Arc::new("bar");
+
         assert_eq!(foo.len(), 3);
         assert_eq!(foo.as_str(), "foo");
         assert_eq!(foo, foo);
+
+        // Our SneakyArcInner hack should result in an Arc with the same
+        // reference counts as if it was created normally.
+        assert_eq!(Arc::strong_count(&foo), Arc::strong_count(&normal_arc));
+        assert_eq!(Arc::weak_count(&foo), Arc::weak_count(&normal_arc));
     }
 }

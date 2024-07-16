@@ -18,6 +18,7 @@
 extern crate assert_unchecked;
 extern crate alloc;
 
+mod tmp;
 mod heap;
 mod store;
 mod tags;
