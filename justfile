@@ -2,15 +2,15 @@ init:
     cargo binstall taplo-cli cargo-nextest
 
 test:
-    cargo nextest run --all-features
-    cargo test --doc --all-features
+    cargo nextest run
+    cargo test --doc
 
 test-miri:
-    cargo +nightly miri nextest run --all-features
+    cargo +nightly miri nextest run
 
 lint:
     taplo lint
-    cargo clippy --all-features
+    cargo clippy --features serde,nohash-hasher
 
 lint-fix:
     cargo clippy --fix --allow-staged
