@@ -161,8 +161,14 @@ impl HeapAtom {
         // TODO: should we use Box semantics or NonNull semantics?
         // fat pointer to dynamically-sized type (DST)
         let fat_ptr: Arc<HeapAtom> = unsafe {
-            let slice: &mut [u8] = slice::from_raw_parts_mut(ptr, layout.size());
-            let fat_raw = slice as *mut [u8] as *mut SneakyArcInner<HeapAtom>;
+            // The cast from slice to fat_raw cast seems to be adding 32 bytes
+            // to the pointer's size when slice is &mut [u8]. Confirmable via
+            // Layout::from_value(&slice).size(). Making this a usize slice
+            // seems to help, but not fully fix it? needs investigation.
+            // NOTE: ^ this only gets detected by Miri. Functional tests work
+            // both before and after.
+            let slice: &mut [usize] = slice::from_raw_parts_mut(ptr as *mut usize, layout.size() / size_of::<usize>());
+            let fat_raw = slice as *mut [usize] as *mut SneakyArcInner<HeapAtom>;
             #[cfg(debug_assertions)]
             {
                 let fat_layout = Layout::for_value(fat_raw.as_ref().unwrap());
@@ -348,6 +354,15 @@ mod test {
         assert_eq!(foo.len(), 3);
         assert_eq!(foo.as_str(), "foo");
         assert_eq!(foo, foo);
+    }
+
+    #[test]
+    fn test_long() {
+        let atom = HeapAtom::new("this is a long string with an odd number of characters.", None);
+
+        assert_eq!(atom.len(), 55);
+        assert_eq!(atom.as_str(), "this is a long string with an odd number of characters.");
+        assert_eq!(atom, atom);
     }
 
     #[test]
